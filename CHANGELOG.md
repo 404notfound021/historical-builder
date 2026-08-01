@@ -1,3 +1,33 @@
+## v2.2.0 (2026-08-01)
+
+### Added
+- **Phase 4.5 Normalize 层** (`pipeline/normalizer.py`) — 渲染前唯一数据合同
+  - 剥离所有 wikilink 标记，数据永远纯净
+  - 自动补全缺失引用 stub（人物/事件）
+  - 关系类型归一化 + 反链自动补全
+  - 事件-人物双向同步
+  - 无考/空值过滤
+- **单元测试** (62 tests, 4 modules)
+  - Normalizer: wikilink strip / relation dedup / event sync / stub create / position filter
+  - Templates: no [[无考]] / no double brackets / body wikilink / position filtering
+  - Events: 30+ filter patterns
+  - Dedup: cross-chapter merge / name fragments
+
+### Fixed
+- [[无考]] 空节点彻底消除（Normalizer + 模板双重过滤）
+- 人物关系双括号反复出现（Normalizer 剥离 → 模板统一包裹）
+- 孙权 0 事件（event-participant 同步反向补全）
+- 洛阳等空地点节点（place_normalization 映射 + stub 自动生成）
+- 关系类型归一化（父子→子, 第二任妻→夫妻 等）
+- 官职/爵位 同名去重
+
+### Changed
+- 模板: 所有 wikilink 包裹前检查 "无考"/空值
+- 模板: body 表格统一 [[wikilink]] 包裹
+- 事件过滤: 新增 "病逝" 等 pattern, 长度阈值 20→18
+- `_strip_wikilink`: 改为递归剥除（支持三层+）
+
+
 # Changelog
 
 ## v2.1.0 (2026-08-01)

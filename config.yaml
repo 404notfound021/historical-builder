@@ -1,130 +1,160 @@
-# ============================================================
-# Historical Builder — 全局配置（跨书共享）
-# ============================================================
-
-# LLM
-llm:
-  provider: "siliconflow"
-  api_base: "https://api.siliconflow.cn/v1"
-  model: "Qwen/Qwen2.5-32B-Instruct"
-  temperature: 0.3
-  max_tokens: 8192
-  max_retries: 3
-
-# 多模型分层（V2）
-models:
-  extraction: "Qwen/Qwen2.5-32B-Instruct"
-  synthesis: "deepseek-ai/DeepSeek-V3"
-  review: "Qwen/Qwen2.5-32B-Instruct"
-
-# Obsidian
-obsidian_root: "~/Library/Mobile Documents/com~apple~CloudDocs/Obsidian/枢机智库"
-output_base: "Raw_Source/History"
-person_folder: 人物
-event_folder: 事件
-place_folder: 地名
-position_folder: 职官
-source_folder: 史书
-moc_folder: MOC
-
-# 地名标准化（全局映射，跨书共享）
-# LLM 推断的今地经过此表归一，多书扫描后收敛到同一节点
-place_normalization:
-  "应天府": "南京"
-  "江宁府": "南京"
-  "建业": "南京"
-  "建康": "南京"
-  "金陵": "南京"
-  "建业": "南京"
-  "秣陵": "南京"
-  "建邺": "南京"
-  "北平府": "北京"
-  "大都": "北京"
-  "涿郡涿县": "河北省涿州市"
-  "琅邪阳都": "山东省临沂市沂南县"
-
-# 职官标准化（全局映射）
-position_normalization:
-  "相国": "丞相"
-
-# 职等分类（跨朝代统一标签，粒度宽松，用于 Dataview 聚合）
-position_categories:
-  - 三公
-  - 九卿
-  - 三省长官
-  - 州郡长官
-  - 县级
-  - 四征
-  - 四镇
-  - 禁军将领
-
-# 人物关系类型（受控词表）
-relation_types:
-  - 父子
-  - 母子
-  - 兄弟
-  - 姐妹
-  - 夫妻
-  - 叔侄
-  - 舅甥
-  - 祖孙
-  - 君臣
-  - 同僚
-  - 师生
-  - 朋友
-  - 敌对
-  - 举荐
-  - 幕僚
-  - 先祖
-
-# 处理参数
-processing:
-  chunk_size: 2000
-  chunk_overlap: 200
-
-# 去重
 dedup:
-  strategy: "name+dynasty"
   embedding_threshold: 0.85
-
-# ============================================================
-# 声明式字段 Schema
-# ============================================================
-
-# 古代人物字段（era: ancient）
+  strategy: name+dynasty
+event_folder: 事件
+llm:
+  api_base: https://api.siliconflow.cn/v1
+  max_retries: 3
+  max_tokens: 8192
+  model: Qwen/Qwen2.5-32B-Instruct
+  provider: siliconflow
+  temperature: 0.3
+moc_folder: MOC
+models:
+  extraction: Qwen/Qwen2.5-32B-Instruct
+  review: Qwen/Qwen2.5-32B-Instruct
+  synthesis: deepseek-ai/DeepSeek-V3
+obsidian_root: ~/Library/Mobile Documents/com~apple~CloudDocs/Obsidian/枢机智库
+output_base: Raw_Source/History
+person_folder: 人物
+place_folder: 地名
+place_normalization:
+  北平府: 北京
+  大都: 北京
+  应天府: 南京
+  建业: 南京
+  建康: 南京
+  建邺: 南京
+  江宁府: 南京
+  洛阳: 河南省洛阳市
+  涿郡涿县: 河北省涿州市
+  琅邪阳都: 山东省临沂市沂南县
+  秣陵: 南京
+  金陵: 南京
+position_categories:
+- 三公
+- 九卿
+- 三省长官
+- 州郡长官
+- 县级
+- 四征
+- 四镇
+- 禁军将领
+position_folder: 职官
+position_normalization:
+  相国: 丞相
+processing:
+  chunk_overlap: 200
+  chunk_size: 2000
+relation_types:
+- 父子
+- 母子
+- 兄弟
+- 姐妹
+- 夫妻
+- 叔侄
+- 舅甥
+- 祖孙
+- 君臣
+- 同僚
+- 师生
+- 朋友
+- 敌对
+- 举荐
+- 幕僚
+- 先祖
 schema_ancient:
   base:
-    - {name: "姓名", type: string, required: true}
-    - {name: "字", type: string, required: false}
-    - {name: "号", type: string, required: false}
-    - {name: "朝代", type: list, required: true}
-    - {name: "生年", type: int_or_null, required: false}
-    - {name: "卒年", type: int_or_null, required: false}
-    - {name: "出生地", type: string, required: false}
-    - {name: "出生地今名", type: string, required: false}
-    - {name: "卒地", type: string, required: false}
-    - {name: "卒地今名", type: string, required: false}
-    - {name: "历任势力", type: list_of_objects, required: false}
-    - {name: "官职", type: list_of_objects, required: false}
-    - {name: "爵位", type: list_of_objects, required: false}
-    - {name: "关系", type: list_of_objects, required: false}
-    - {name: "参与事件", type: list_of_strings, required: false}
-    - {name: "生平概述", type: string, required: false}
-
-# 近现代人物字段（era: modern）
+  - name: 姓名
+    required: true
+    type: string
+  - name: 字
+    required: false
+    type: string
+  - name: 号
+    required: false
+    type: string
+  - name: 朝代
+    required: true
+    type: list
+  - name: 生年
+    required: false
+    type: int_or_null
+  - name: 卒年
+    required: false
+    type: int_or_null
+  - name: 出生地
+    required: false
+    type: string
+  - name: 出生地今名
+    required: false
+    type: string
+  - name: 卒地
+    required: false
+    type: string
+  - name: 卒地今名
+    required: false
+    type: string
+  - name: 历任势力
+    required: false
+    type: list_of_objects
+  - name: 官职
+    required: false
+    type: list_of_objects
+  - name: 爵位
+    required: false
+    type: list_of_objects
+  - name: 关系
+    required: false
+    type: list_of_objects
+  - name: 参与事件
+    required: false
+    type: list_of_strings
+  - name: 生平概述
+    required: false
+    type: string
 schema_modern:
   base:
-    - {name: "姓名", type: string, required: true}
-    - {name: "朝代/时期", type: string, required: true}
-    - {name: "生年", type: int_or_null, required: false}
-    - {name: "卒年", type: int_or_null, required: false}
-    - {name: "出生地", type: string, required: false}
-    - {name: "出生地今名", type: string, required: false}
-    - {name: "卒地", type: string, required: false}
-    - {name: "卒地今名", type: string, required: false}
-    - {name: "学历", type: list_of_objects, required: false}
-    - {name: "党派", type: string, required: false}
-    - {name: "职业履历", type: list_of_objects, required: false}
-    - {name: "关系", type: list_of_objects, required: false}
-    - {name: "参与事件", type: list_of_strings, required: false}
-    - {name: "生平概述", type: string, required: false}
+  - name: 姓名
+    required: true
+    type: string
+  - name: 朝代/时期
+    required: true
+    type: string
+  - name: 生年
+    required: false
+    type: int_or_null
+  - name: 卒年
+    required: false
+    type: int_or_null
+  - name: 出生地
+    required: false
+    type: string
+  - name: 出生地今名
+    required: false
+    type: string
+  - name: 卒地
+    required: false
+    type: string
+  - name: 卒地今名
+    required: false
+    type: string
+  - name: 学历
+    required: false
+    type: list_of_objects
+  - name: 党派
+    required: false
+    type: string
+  - name: 职业履历
+    required: false
+    type: list_of_objects
+  - name: 关系
+    required: false
+    type: list_of_objects
+  - name: 参与事件
+    required: false
+    type: list_of_strings
+  - name: 生平概述
+    required: false
+    type: string
+source_folder: 史书

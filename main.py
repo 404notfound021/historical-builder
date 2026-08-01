@@ -144,62 +144,24 @@ def main():
         renderer = TemplateRenderer(PROJECT_ROOT / "resource" / "templates")
         writer = FileWriter(str(obsidian_root), global_config["output_base"], renderer)
 
+        # 5.0: NORMALIZE — 统一数据合同
+        from pipeline.normalizer import Normalizer
+        nz = Normalizer(book_config, global_config)
 
-        # 5.0: 数据清洗——去重官职/关系/事件
-        from pipeline.deduper import _strip_wikilink
-        for person in resolved:
-            # 官职、爵位、历任势力 同名去重
-            for pf in ['官职', '爵位', '历任势力']:
-                if pf not in person: continue
-                seen = {}
-                deduped = []
-                for item in person[pf]:
-                    if not isinstance(item, dict): continue
-                    name = _strip_wikilink(item.get('名称', item.get('爵名', item.get('势力', ''))))
-                    if not name or name == '无考': continue
-                    if name not in seen:
-                        seen[name] = item
-                        deduped.append(item)
-                    elif item.get('时段') and item['时段'] not in ('无考','') and (not seen[name].get('时段') or seen[name].get('时段') in ('无考','')):
-                        seen[name] = item
-                        deduped[-1] = item
-                person[pf] = deduped
-            # 关系去重
-            if '关系' in person:
-                seen = set(); clean = []
-                for rel in person['关系']:
-                    if not isinstance(rel, dict): continue
-                    key = (_strip_wikilink(rel.get('人物','')), rel.get('关系类型',''))
-                    if key[0] and key not in seen:
-                        seen.add(key); clean.append(rel)
-                person['关系'] = clean
-            # 事件去重 + 归一化
-            if '参与事件' in person:
-                person['参与事件'] = list(dict.fromkeys(person['参与事件']))
-                # 合并同义事件：诛董卓/诛杀董卓/吕布诛董卓 → 诛董卓
-                norm_map = {}
-                events = sorted(person['参与事件'], key=lambda x: len(str(x)))
-                for ev in events:
-                    ev_str = _strip_wikilink(str(ev))
-                    merged = False
-                    for seed in list(norm_map.keys()):
-                        if len(ev_str) > len(seed) * 3:  # 放宽长名限制
-                            continue
-                        common = set(ev_str) & set(seed)
-                        if len(common) >= min(len(ev_str), len(seed)) * 0.6:
-                            merged = True
-                            break
-                    if not merged:
-                        norm_map[ev_str] = ev_str
-                seen_ev = set()
-                clean_ev = []
-                for e in events:
-                    e_stripped = _strip_wikilink(str(e))
-                    canonical = norm_map.get(e_stripped, e_stripped)
-                    if canonical not in seen_ev:
-                        seen_ev.add(canonical)
-                        clean_ev.append(canonical)
-                person['参与事件'] = clean_ev
+        # Load events
+        events_path = intermediate_dir / "linked_events.json"
+        linked_events = None
+        if events_path.exists():
+            linked_events = json.loads(events_path.read_text(encoding="utf-8"))
+
+        if linked_events:
+            resolved, linked_events = nz.run(resolved, linked_events)
+            (intermediate_dir / "linked_events.json").write_text(
+                json.dumps(linked_events, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        else:
+            print("  跳过 Normalize: 无事件数据")
+
 
         from pipeline.incremental_writer import IncrementalWriter
         from pipeline.provenance_tracker import ProvenanceTracker

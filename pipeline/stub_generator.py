@@ -54,7 +54,7 @@ def _dedup_era(entries):
 
 def _is_valid_event(name: str) -> bool:
     """过滤掉 LLM 产生的伪事件（传记碎片/个人行为描述）"""
-    if len(name) > 20:
+    if len(name) > 18:
         return False
     if any(c in name for c in "。，；：！？『』「」（）\"'”“"):
         return False
@@ -72,7 +72,7 @@ def _is_valid_event(name: str) -> bool:
         if name.startswith(prefix) and len(name) <= 15:
             return False
     # 继承权、废立、XX之争 — 多为个人行为
-    bad_suffixes = ["之争", "继承权", "之乱", "自立", "薨", "卒", "崩", "殂", "被杀", "遇害", "赐死", "处死"]
+    bad_suffixes = ["之争", "继承权", "之乱", "自立", "薨", "卒", "崩", "殂", "被杀", "遇害", "赐死", "处死", "病逝"]
     for suffix in bad_suffixes:
         if name.endswith(suffix) and len(name) <= 12:
             return False
