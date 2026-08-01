@@ -48,7 +48,7 @@ def main():
     book_config = load_book_config(args.book)
 
     book_name = book_config["book_name"]
-    obsidian_root = Path(args.obsidian_root or global_config["obsidian_root"]).expanduser()
+    obsidian_root = Path(args.obsidian_root or book_config.get("obsidian_root") or global_config["obsidian_root"]).expanduser()
     intermediate_dir = PROJECT_ROOT / "output" / book_name / "intermediate"
     state_path = PROJECT_ROOT / "output" / book_name / "state.json"
 

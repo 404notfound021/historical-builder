@@ -1,4 +1,5 @@
 book_name: 红楼梦
+obsidian_root: ~/Library/Mobile Documents/com~apple~CloudDocs/Obsidian/宝黛宇宙
 chapter_split:
   mode: regex
   pattern: ^第[0-9]+章
