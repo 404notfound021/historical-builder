@@ -1,3 +1,18 @@
+## v2.3.1 (2026-08-01)
+
+### Added
+- **era-aware关系分类架构**: relation_types拆为base(17种)+literary(9种)，normalizer按era动态merge RT/REV
+- **文学事件prompt**: extract_event_literary.md，事件框架从"历史战役"→"情节节点"
+- **fix_literary_relations.py**: 基于servant/concubine/lover白名单的关系后处理修正器(秒级修复LLM"同僚"误分类)
+
+### Fixed
+- **extractor_event.py**: 修复prompt_override硬编码(始终读common_extract_event.md)
+- **file_writer.py**: _build_output_dir支持output_subdir，修复文学/历史数据混写bug
+- **normalizer**: bad_pos/title_fix/dynasty_stubs全部era-aware，TITLE_FIX后同名合并+位宫过滤
+
+### Changed
+- person_literary prompt: 关系按血缘/婚姻/社会/情感四维分类
+
 ## v2.3.0 (2026-08-01)
 
 ### Added
