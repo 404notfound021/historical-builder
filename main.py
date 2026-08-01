@@ -223,11 +223,7 @@ def main():
             chapter_str = chapter_titles.get(source_chapters[0], "") if source_chapters else ""
             provenance.track_person(person, chapter_str)
 
-            # Final wikilink wrap: ensure all person names in relations have [[ ]]
-            for rel in person.get("关系", []):
-                if isinstance(rel, dict) and "人物" in rel:
-                    tgt = rel["人物"].replace("[[", "").replace("]]", "")
-                    rel["人物"] = f"[[{tgt}]]"
+            # Template handles [[wikilink]] wrapping, no need to pre-wrap here
             path, written, status = inc_writer.write_person_incremental(book_config, person)
             if "新建" in status:
                 person_stats["新建"] += 1
