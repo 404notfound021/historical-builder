@@ -128,12 +128,16 @@ class LiteraryEra(BaseEra):
 
         if events:
             for e in events:
-                loc = (e.get('地点','') or '').strip()
-                if not loc or loc == '无考': continue
+                loc_raw = (e.get('地点','') or '').strip()
+                if not loc_raw or loc_raw == '无考': continue
                 ename = e.get('事件名称','')
-                place_events.setdefault(loc, []).append(ename)
-                for pn in e.get('参与人物',[]):
-                    place_persons.setdefault(loc, set()).add(str(pn))
+                # Split compound locations: "贾家学房、宁国府" → two separate places
+                for loc in re.split(r'[、，,]', loc_raw):
+                    loc = loc.strip()
+                    if not loc: continue
+                    place_events.setdefault(loc, []).append(ename)
+                    for pn in e.get('参与人物',[]):
+                        place_persons.setdefault(loc, set()).add(str(pn))
 
         for p in persons:
             for field in ['出生地','卒地']:
