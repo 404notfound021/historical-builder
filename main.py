@@ -284,7 +284,7 @@ id: {source_data['id']}
         for person in resolved:
             source_rendered += f"- [[{person['姓名']}]]\n"
 
-        source_dir = writer.obsidian_root / writer.output_base / global_config.get("source_folder", "史书")
+        source_dir = writer._build_output_dir(book_config, global_config.get("source_folder", "史书"))
         source_dir.mkdir(parents=True, exist_ok=True)
         source_file = source_dir / f"{book_name}.md"
         if not source_file.exists():
