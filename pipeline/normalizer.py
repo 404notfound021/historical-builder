@@ -1,4 +1,4 @@
-"""Phase 4.5: 数据归一化层 —— 渲染前的唯一数据合同"""
+"""Phase 4.5: 数据归一化层 — 渲染前的唯一数据合同 — era-aware"""
 import json, re, uuid
 from datetime import datetime, timezone
 
@@ -9,91 +9,31 @@ def _s(s):
 
 INVAL={'无考','','None','none','null','不详'}
 
-# ── Base relation maps (universal, all eras) ──
-BASE_RT={
-    '父子':'子','母子':'子','父':'子','母':'子','子':'父子','女':'女','女兒':'女',
-    '兄弟':'兄弟','姐妹':'姐妹',
-    '夫妻':'夫妻','第二任妻':'夫妻','第三任妻':'夫妻',
-    '祖孙':'祖孙','先祖':'先祖','直系祖先':'先祖',
-    '叔侄':'叔侄','舅甥':'舅甥',
-    '君臣':'臣属','臣属':'臣属',
-    '同僚':'同僚','朋友':'朋友','敌对':'敌对',
-    '师生':'师生','幕僚':'主公','举荐':'被举荐',
-    '次子':'子','长子':'子','女婿':'女婿',
-}
-BASE_REV={
-    '子':'父子','女':'父子',
-    '兄弟':'兄弟','姐妹':'姐妹',
-    '夫妻':'夫妻','祖孙':'祖孙','先祖':'先祖',
-    '叔侄':'叔侄','舅甥':'舅甥',
-    '臣属':'君臣','同僚':'同僚','朋友':'朋友','敌对':'敌对',
-    '学生':'师生','主公':'幕僚','被举荐':'举荐',
-    '女婿':'岳婿',
-}
-
-# ── Literary enrichment ──
-LITERARY_RT={
-    '恋人':'恋人',
-    '主仆':'仆从',
-    '妾室':'妾室',
-    '姑侄':'姑侄',
-    '姨甥':'姨甥',
-    '表亲':'表亲',
-    '妯娌':'妯娌',
-    '连襟':'连襟',
-    '堂亲':'堂亲',
-    '养父子':'子','养母子':'子',
-}
-LITERARY_REV={
-    '恋人':'恋人',
-    '仆从':'主仆',
-    '妾室':'妾室',
-    '姑侄':'姑侄',
-    '姨甥':'姨甥',
-    '表亲':'表亲',
-    '妯娌':'妯娌',
-    '连襟':'连襟',
-    '堂亲':'堂亲',
-}
-
-# ── Era-aware constants ──
-ANCIENT_TITLE_FIX={
-    '高贵乡公髦':('曹髦',[{'类型':'谥号','名称':'高贵乡公'}]),
-    '陈留王奂':('曹奂',[{'类型':'爵号','名称':'陈留王'}]),
-    '齐王芳':('曹芳',[{'类型':'爵号','名称':'齐王'}]),
-}
-ANCIENT_DYNASTIES={'东汉','西汉','曹魏','蜀汉','东吴','西晋','东晋','倭国'}
-ANCIENT_PLACE_GENERIC={'吴地':'扬州','蜀地':'益州','魏地':'中原','秦地':'关中'}
-ANCIENT_GARBAGE=['-东汉','-曹魏','-蜀汉','-东吴','魏晋','曹魏-','皇帝','群臣','百官','公卿','位宫']
-
-ANCIENT_BAD_POS={'夫人','皇帝','皇后','太子','太后','王子','公主','世子','无考'}
-LITERARY_BAD_POS={'无考'}  # literary: only filter placeholder values
-
 class Normalizer:
-    def __init__(self, book_config, global_config):
+    def __init__(self, book_config, global_config, era=None):
         self.bc=book_config
         self.gc=global_config
+        self.era=era
         self.pn=global_config.get('place_normalization',{})
         self.dyn=book_config.get('dynasty_name','')
-        self.era=book_config.get('era','ancient')
 
-        # Build effective RT/REV: base + era enrichment
-        self.RT=dict(BASE_RT)
-        self.REV=dict(BASE_REV)
-        if self.era=='literary':
-            self.RT.update(LITERARY_RT)
-            self.REV.update(LITERARY_REV)
-
-        # Era-aware filter sets
-        self.bad_pos=LITERARY_BAD_POS if self.era=='literary' else ANCIENT_BAD_POS
-        self.title_fix=ANCIENT_TITLE_FIX
-        self.dynasty_stubs=ANCIENT_DYNASTIES
-        self.place_generic=ANCIENT_PLACE_GENERIC
-        self.garbage_names=ANCIENT_GARBAGE
-
-        # Era filters from config (override bad_position_terms)
-        era_cfg=global_config.get('era_filters',{}).get(self.era,{})
-        self.bad_terms=era_cfg.get('bad_position_terms',[])
+        # 从 era 读取关系映射
+        if era:
+            self.RT=era.relation_rt
+            self.REV=era.relation_rev
+            self.bad_pos=era.bad_position_terms
+            self.title_fix=era.title_fix
+            self.dynasty_stubs=era.dynasty_stubs
+            self.place_generic=era.place_generic
+            self.garbage_names=era.garbage_names
+        else:
+            self.RT={'父子':'子','母子':'子','父':'子','母':'子','子':'父子','女':'女','兄弟':'兄弟','夫妻':'夫妻'}
+            self.REV={'子':'父子','女':'父子','兄弟':'兄弟','夫妻':'夫妻'}
+            self.bad_pos={'无考'}
+            self.title_fix={}
+            self.dynasty_stubs=set()
+            self.place_generic={}
+            self.garbage_names=[]
 
     def run(self, persons, events):
         print('--- Normalize ---')
@@ -138,7 +78,7 @@ class Normalizer:
             for pn in e.get('参与人物',[]):
                 pn=_s(str(pn))
                 if pn in pnames: vp.append(pn)
-                elif pn and pn not in INVAL and not self._should_skip_stub(pn):
+                elif pn and pn not in INVAL and (not self.era or not self.era.validate_stub(pn)):
                     pnames.add(pn);persons.append(self._stub(pn));vp.append(pn)
             e['参与人物']=vp
         # Person<-Event reverse
@@ -156,8 +96,7 @@ class Normalizer:
             loc=re.sub(r'之[南北东西]$','',loc)
             if loc in self.pn: e['地点']=self.pn[loc]
             else: e['地点']=loc
-        # Generic place mapping (ancient only)
-        if self.era=='ancient':
+        if self.place_generic:
             for e in events:
                 loc=e.get('地点','')
                 if loc in self.place_generic: e['地点']=self.place_generic[loc]
@@ -170,12 +109,6 @@ class Normalizer:
                 if p.get(f) in INVAL: p[f]=''
             p['朝代']=[d for d in p.get('朝代',[]) if d not in INVAL]
             p['关系']=[r for r in p.get('关系',[]) if r.get('人物','') not in INVAL]
-
-        # Era-aware position filter
-        if self.bad_terms:
-            for p in persons:
-                if '官职' in p:
-                    p['官职']=[o for o in p['官职'] if not any(t in o.get('名称','') for t in self.bad_terms)]
 
         # Position/peerage name dedup
         for p in persons:
@@ -201,7 +134,7 @@ class Normalizer:
                     if key not in seen: seen.add(key);clean.append(item)
                 p[f]=clean
 
-        # Title fix (ancient only)
+        # Title fix + position/peerage filter
         for p in persons:
             name=p.get('姓名','')
             if name in self.title_fix:
@@ -224,25 +157,28 @@ class Normalizer:
         persons=[p for p in persons if p is not None]
         pnames={p['姓名'] for p in persons}
 
-        # Dynasty stubs (ancient only)
-        if self.era=='ancient':
-            for d in self.dynasty_stubs:
-                if d not in pnames: pnames.add(d);persons.append(self._stub(d))
+        # Dynasty stubs (era-specific)
+        for d in self.dynasty_stubs:
+            if d not in pnames: pnames.add(d);persons.append(self._stub(d))
 
         # Filter garbage names
-        persons=[p for p in persons if not any(g in p.get('姓名','') for g in self.garbage_names)]
-        pnames={p['姓名'] for p in persons}
+        if self.garbage_names:
+            persons=[p for p in persons if not any(g in p.get('姓名','') for g in self.garbage_names)]
+            pnames={p['姓名'] for p in persons}
 
-        # Relation stub targets
+        # Relation stub targets (with era alias resolution)
+        if self.era:
+            aliases = self.era.aliases
+        else:
+            aliases = {}
         for p in persons:
             for r in p.get('关系',[]):
                 tgt=r.get('人物','')
                 tgt=re.sub(r'\([^)]+\)','',tgt).strip()
-                # Resolve alias to main name
-                if self.era=='literary' and tgt in self.ALIAS_MAP:
-                    tgt=self.ALIAS_MAP[tgt]
+                if tgt in aliases:
+                    tgt=aliases[tgt]
                 r['人物']=tgt
-                if tgt and tgt not in INVAL and tgt not in pnames and not self._should_skip_stub(tgt):
+                if tgt and tgt not in INVAL and tgt not in pnames and (not self.era or not self.era.validate_stub(tgt)):
                     pnames.add(tgt);persons.append(self._stub(tgt))
 
         # Event stub targets
@@ -261,35 +197,11 @@ class Normalizer:
         if isinstance(data,str): return _s(data)
         return data
 
-    ALIAS_MAP = {
-        '宝玉':'贾宝玉','黛玉':'林黛玉','宝钗':'薛宝钗','凤姐':'王熙凤',
-        '凤姐儿':'王熙凤','湘云':'史湘云','宝琴':'薛宝琴','岫烟':'邢岫烟',
-        '探春':'贾探春','迎春':'贾迎春','惜春':'贾惜春','元春':'贾元春',
-        '巧姐':'贾巧姐','巧姐儿':'贾巧姐','金桂':'夏金桂',
-        '贾妃':'贾元春','元妃':'贾元春','代儒':'贾代儒',
-        '可卿':'秦可卿','五儿':'柳五儿','刘姥姥':'刘老老',
-        '贾蓉媳妇':'秦可卿','贾蓉的媳妇':'秦可卿',
-        '秦氏':'秦可卿','贾珠之妻李氏':'李纨','李宫裁':'李纨',
-        '大姐儿':'贾巧姐',
-    }
-
-    STUB_REJECT = re.compile(
-        r'(?:的(?:娘|妈|母亲|父亲|哥哥|弟弟|姐姐|妹妹|儿子|女儿|孙子|孙女|'
-        r'表兄|表弟|表哥|表姐|表妹|干娘|干儿子|嫂子|婆婆|大娘|奶奶|爷|'
-        r'姑姑|姑妈|姨妈|舅舅|叔叔|婶婶|女人|男人|师傅|姑娘)$'
-        r'|媳妇$|家的$|的女人$|的哥哥$|的弟弟$|的儿子$|的母亲$|的父亲$'
-        r'|^两个|们$|众人$|几个|其他成员$'
-        r'|[（(].+[）)])'
-    )
-
-    def _should_skip_stub(self, name):
-        return bool(self.STUB_REJECT.search(name))
-
     def _stub(self, name):
-        return {'id':str(uuid.uuid4()),'姓名':name,'字':'无考','号':'无考','朝代':[],'生年':None,'卒年':None,'出生地':'','出生地今名':'','卒地':'','卒地今名':'','历任势力':[],'官职':[],'爵位':[],'关系':[],'参与事件':[],'生平概述':'','标签':['历史人物','自动生成stub']}
+        label = self.era.label if self.era else '历史人物'
+        return {'id':str(uuid.uuid4()),'姓名':name,'字':'无考','号':'无考','朝代':[],'生年':None,'卒年':None,'出生地':'','出生地今名':'','卒地':'','卒地今名':'','历任势力':[],'官职':[],'爵位':[],'关系':[],'参与事件':[],'生平概述':'','标签':[label,'自动生成stub']}
 
     def _merge_person(self, base, other):
-        """合并两个同名人物，other 的数据补入 base（base 优先）"""
         for f in ['字','号','出生地','出生地今名','卒地','卒地今名','生平概述']:
             if not base.get(f) or base[f]=='无考':
                 v=other.get(f)

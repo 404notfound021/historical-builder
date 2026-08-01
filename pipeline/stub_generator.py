@@ -52,13 +52,12 @@ def _dedup_era(entries):
             seen.add(e["名称"]); result.append(e)
     return result
 
-def _is_valid_event(name: str) -> bool:
+def _is_valid_event(name: str, surname_chars: str = "") -> bool:
     """过滤掉 LLM 产生的伪事件（传记碎片/个人行为描述）"""
     if len(name) > 18:
         return False
     if any(c in name for c in "。，；：！？『』「」（）\"'”“"):
         return False
-    # 被XX所杀/击破/处死、与XX对抗/交战/联姻、征讨/讨伐/攻XX、谏XX
     bad_prefixes = ["被", "与", "攻", "征", "讨", "谏", "斩", "封", "拜", "遣",
                     "上疏", "上书", "上表", "上言", "上封", "请", "令", "使",
                     "以", "率", "从", "随", "降", "奔", "投", "归", "杀", "戮",
@@ -71,32 +70,30 @@ def _is_valid_event(name: str) -> bool:
     for prefix in bad_prefixes:
         if name.startswith(prefix) and len(name) <= 15:
             return False
-    # 继承权、废立、XX之争 — 多为个人行为
     bad_suffixes = ["之争", "继承权", "之乱", "自立", "薨", "卒", "崩", "殂", "被杀", "遇害", "赐死", "处死", "病逝"]
     for suffix in bad_suffixes:
         if name.endswith(suffix) and len(name) <= 12:
             return False
-    # 人名+动作：如 曹真征朱然、曹操伐徐州
+    # 人名+动作: 使用 era 提供的姓氏字符集
+    chars = surname_chars or "曹刘孙诸葛司马关张赵马黄"
     for pat in ["征", "伐", "讨", "击", "破", "袭", "攻", "战", "围", "斩", "降", "举", "荐"]:
-        if pat in name and any(c in name for c in "曹刘孙诸葛司马关张赵马黄") and len(name) <= 15:
+        if pat in name and any(c in name for c in chars) and len(name) <= 15:
             return False
-    # 包含"因"或"被"的个人叙事
     if ("因" in name or "被" in name) and len(name) <= 15:
         return False
-    # 包含人名列表（XX与YY/XX、YY）的是具体行动
     if ("与" in name or "、" in name) and len(name) <= 15:
-        for c in "曹刘孙诸葛司马关张赵马黄吕周陆朱":
-            if c in name:
-                return False
+        if any(c in name for c in chars + "吕周陆朱"):
+            return False
     return True
 
 
 class StubGenerator:
     def __init__(self, writer: FileWriter, renderer: TemplateRenderer, book_config: dict,
-                 global_config: dict, intermediate_dir: Path):
+                 global_config: dict, intermediate_dir: Path, era=None):
         self.writer = writer
         self.renderer = renderer
         self.book_config = book_config
+        self.era = era
         self.place_norm = global_config.get("place_normalization", {})
         self.dynasty_name = book_config.get("dynasty_name", "")
         self.intermediate_dir = intermediate_dir
@@ -107,7 +104,7 @@ class StubGenerator:
         stats = {}
 
         stats["事件"] = self._generate_events(resolved_persons, now, linked_events)
-        stats["地名"] = self._generate_places(resolved_persons, now)
+        stats["地名"] = self._generate_places(resolved_persons, now, linked_events)
         stats["职官"] = self._generate_positions(resolved_persons, now)
 
         return stats
@@ -137,7 +134,8 @@ class StubGenerator:
                 ev_name = _strip_wikilink(ev_name)
                 if not ev_name or ev_name == "无考":
                     continue
-                if _is_valid_event(ev_name):
+                surnames = self.era.event_filter_surnames if self.era else ""
+                if _is_valid_event(ev_name, surnames):
                     event_persons.setdefault(ev_name, []).append(p["姓名"])
                 else:
                     rejected += 1
@@ -177,13 +175,18 @@ class StubGenerator:
             print(f"    事件过滤: {rejected} 个碎片已丢弃")
         return count
 
-    def _generate_places(self, persons: list[dict], now: str) -> int:
+    def _generate_places(self, persons: list[dict], now: str, linked_events: list[dict] = None) -> int:
         """
         地名策略:
-        - 省级/地级 → 独立文件
-        - 县级/乡镇 → 挂载到上级的聚合页
-        - 从 CBDB 补充坐标和行政级别
+        - ancient: 省级/地级 → 独立文件; 县级/乡镇 → 挂载到上级聚合页; CBDB补全坐标
+        - literary: 从事件地点提取虚构地名, 独立文件, 无省层级
         """
+        if self.era and hasattr(self.era, 'extract_places'):
+            # Literary: 从事件地点提取虚构地名
+            place_data = self.era.extract_places(persons, linked_events)
+            if place_data and isinstance(place_data, tuple):
+                return self._write_literary_places(place_data, now)
+
         # CBDB 地名补全
         cbdb_enricher = None
         cbdb_path = Path(os.path.expanduser('~/workspace/dev/experiments/cbdb_sqlite/cbdb_20260725.sqlite3'))
@@ -243,6 +246,52 @@ class StubGenerator:
 
         if cbdb_enricher:
             cbdb_enricher.close()
+        return count
+
+    def _write_literary_places(self, place_data: tuple, now: str) -> int:
+        """文学地名: 使用 era.extract_places() 返回的 (place_events, place_persons) 写入文件"""
+        import re as _re
+        place_events, place_persons = place_data
+
+        count = 0
+        output_dir = self.writer._build_output_dir(self.book_config, '地名')
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        for loc, events in sorted(place_events.items()):
+            safe = _re.sub(r'[<>:"/\\|?*]', '-', loc)
+            filepath = output_dir / f'{safe}.md'
+
+            if filepath.exists():
+                continue
+
+            persons_list = list(place_persons.get(loc, set()))
+            evt_links = '\n'.join(f'- [[{e}]]' for e in sorted(set(events)))
+            person_links = '\n'.join(f'- [[{p}]]' for p in sorted(persons_list)[:30])
+
+            content = f'''---
+类型: 地名
+id: {str(abs(hash(loc)) % 10**16)}
+名称: {loc}
+类别: ["文学虚构地点"]
+出处史书: "[[{self.book_config.get('book_name','')}]]"
+创建时间: {now}
+修改时间: {now}
+---
+
+# {loc}
+
+## 相关事件
+
+{evt_links}
+
+## 相关人物
+
+{person_links}
+'''
+            filepath.write_text(content, encoding='utf-8')
+            print(f'  + 地名: {loc}.md')
+            count += 1
+
         return count
 
     def _make_place_data(self, canonical, refs, hierarchy, now):

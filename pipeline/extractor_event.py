@@ -19,11 +19,12 @@ class ExtractionError(Exception):
 
 
 class EventExtractor:
-    def __init__(self, llm_client, book_config: dict, prompt_dir: Path, intermediate_dir: Path):
+    def __init__(self, llm_client, book_config: dict, prompt_dir: Path, intermediate_dir: Path, era=None):
         self.llm = llm_client
         self.book_config = book_config
         self.prompt_dir = prompt_dir
         self.intermediate_dir = intermediate_dir
+        self.parser = JsonParser(era)
         prompt_override = book_config.get("prompt_override", {})
         event_prompt_file = prompt_override.get("event") or "common_extract_event.md"
         self.event_prompt = (prompt_dir / event_prompt_file).read_text(encoding="utf-8")
@@ -87,7 +88,7 @@ class EventExtractor:
         import time
         time.sleep(3)
         try:
-            return JsonParser.parse_event_with_retry(
+            return self.parser.parse_event_with_retry(
                 self.llm, self.event_prompt, user_message, max_retries=3
             )
         except JsonParseError as e:

@@ -21,6 +21,7 @@ from pipeline.deduper import Deduper
 from pipeline.wikilink_resolver import WikilinkResolver
 from pipeline.metadata import MetadataInjector
 from pipeline.template_renderer import TemplateRenderer
+from pipeline.eras import get_era
 from utils.llm_client import LLMClient
 from utils.file_writer import FileWriter
 
@@ -48,6 +49,7 @@ def main():
     book_config = load_book_config(args.book)
 
     book_name = book_config["book_name"]
+    era = get_era(book_config, global_config)
     obsidian_root = Path(args.obsidian_root or book_config.get("obsidian_root") or global_config["obsidian_root"]).expanduser()
     intermediate_dir = PROJECT_ROOT / "output" / book_name / "intermediate"
     state_path = PROJECT_ROOT / "output" / book_name / "state.json"
@@ -76,7 +78,7 @@ def main():
     # ===== Phase 2: Extract =====
     def phase_extract(chapters):
         llm = LLMClient(global_config)
-        extractor = Extractor(llm, book_config, PROJECT_ROOT / "resource" / "prompts", intermediate_dir)
+        extractor = Extractor(llm, book_config, PROJECT_ROOT / "resource" / "prompts", intermediate_dir, era)
         persons = extractor.run(chapters, state)
         (intermediate_dir / "raw_persons.json").write_text(
             json.dumps(persons, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -89,7 +91,7 @@ def main():
     def phase_extract_events(chapters):
         from pipeline.extractor_event import EventExtractor
         llm = LLMClient(global_config)
-        event_extractor = EventExtractor(llm, book_config, PROJECT_ROOT / "resource" / "prompts", intermediate_dir)
+        event_extractor = EventExtractor(llm, book_config, PROJECT_ROOT / "resource" / "prompts", intermediate_dir, era)
         events = event_extractor.run(chapters, state)
         (intermediate_dir / "raw_events.json").write_text(
             json.dumps(events, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -100,15 +102,12 @@ def main():
     # ===== Phase 3: Dedup =====
     def phase_dedup():
         raw = json.loads((intermediate_dir / "raw_persons.json").read_text(encoding="utf-8"))
-        deduper = Deduper(book_config)
+        deduper = Deduper(book_config, era)
         merged = deduper.deduplicate(raw)
 
-        # Literature relation fixup: reclassify 同僚→主仆/妾室/恋人 for literary works
-        if book_config.get("era") == "literary":
-            sys.path.insert(0, str(PROJECT_ROOT))
-            from scripts.fix_literary_relations import fix_relations
-            merged, fix_stats = fix_relations(merged)
-            print(f"  Relation fixup: {fix_stats.get('total_fixed', 0)} corrected")
+        # Literary relation fixup: 同僚→主仆/妾室/恋人 (via era)
+        if hasattr(era, 'fix_relations'):
+            merged = era.fix_relations(merged)
 
         (intermediate_dir / "merged_persons.json").write_text(
             json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -159,7 +158,7 @@ def main():
         chapter_titles = {c["index"]: c["title"] for c in chapters_data}
 
         metadata = MetadataInjector(book_config, chapter_titles)
-        renderer = TemplateRenderer(PROJECT_ROOT / "resource" / "templates")
+        renderer = TemplateRenderer(PROJECT_ROOT / "resource" / "templates", era)
         writer = FileWriter(str(obsidian_root), global_config["output_base"], renderer)
 
         # Clean iCloud dupes before writing (writer now available)
@@ -174,26 +173,18 @@ def main():
             PROJECT_ROOT / "output" / book_name / "provenance.json", book_name
         )
 
-        # 0.5: CBDB 补全 (仅 ancient 时代，文学人物不走CBDB)
-        cbdb_path = Path(os.path.expanduser("~/workspace/dev/experiments/cbdb_sqlite/cbdb_20260725.sqlite3"))
-        enriched_count = 0
-        if cbdb_path.exists() and book_config.get('era','ancient')=='ancient':
-            from pipeline.cbdb_enricher import CBDBEnricher
-            enricher = CBDBEnricher(cbdb_path)
+        # 0.5: Enrichment (CBDB for ancient, no-op for literary)
+        if hasattr(era, 'enrich_person'):
+            enriched_count = 0
             for person in resolved:
-                before = {k: person.get(k) for k in ["生年", "卒年", "字", "出生地"]}
-                enricher.enrich_person(person)
-                after = {k: person.get(k) for k in ["生年", "卒年", "字", "出生地"]}
-                if before != after:
+                if era.enrich_person(person):
                     enriched_count += 1
-            enricher.close()
-            print(f"  CBDB 补全: {enriched_count}/{len(resolved)} 人")
-        else:
-            print("  CBDB: 数据库未找到，跳过补全")
+            if enriched_count:
+                print(f"  数据补全: {enriched_count}/{len(resolved)} 人")
 
         # 5.0: NORMALIZE — 统一数据合同
         from pipeline.normalizer import Normalizer
-        nz = Normalizer(book_config, global_config)
+        nz = Normalizer(book_config, global_config, era)
 
         # Load events
         events_path = intermediate_dir / "linked_events.json"
@@ -232,6 +223,9 @@ def main():
             chapter_str = chapter_titles.get(source_chapters[0], "") if source_chapters else ""
             provenance.track_person(person, chapter_str)
 
+            # Era-aware label
+            if "标签" not in person or not person["标签"]:
+                person["标签"] = [era.label]
             # Template handles [[wikilink]] wrapping, no need to pre-wrap here
             path, written, status = inc_writer.write_person_incremental(book_config, person)
             if "新建" in status:
@@ -246,7 +240,7 @@ def main():
 
         # 5b: stub 生成
         from pipeline.stub_generator import StubGenerator
-        stub_gen = StubGenerator(writer, renderer, book_config, global_config, intermediate_dir)
+        stub_gen = StubGenerator(writer, renderer, book_config, global_config, intermediate_dir, era)
         # 使用事件pipeline的数据（从raw_events.json读取，link阶段已写入linked_events）
         linked_events = None
         linked_path = intermediate_dir / "linked_events.json"
@@ -258,9 +252,8 @@ def main():
             print(f"  {category}: {count} 个")
 
         # 5c: 书籍源节点
-        era = book_config.get("era", "ancient")
-        source_type = "文学" if era == "literary" else "文献"
-        source_folder = global_config.get("source_folder", "文献")
+        source_type = era.source_type
+        source_folder = global_config.get("source_folder", era.source_folder_default)
 
         source_data = {
             "id": str(abs(hash(book_name)) % 10**16),

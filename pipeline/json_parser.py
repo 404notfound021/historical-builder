@@ -1,8 +1,5 @@
-"""LLM 输出 JSON 解析 + schema 校验 + 自动重试"""
-
-import json
-import re
-import uuid
+"""LLM 输出 JSON 解析 + schema 校验 + 自动重试 — era-aware"""
+import json, re, uuid
 
 
 class JsonParseError(Exception):
@@ -17,76 +14,63 @@ class SchemaValidationError(Exception):
         super().__init__(f"{field}: {message}")
 
 
-# 疑似爵号/谥号/官名的姓名模式（用于自动标记，不拒绝）
 _SUSPECT_NAME_PATTERNS = [
-    r".+[王公侯伯子男]$",           # 以爵位结尾
-    r"^[某].+[帝王后妃]$",          # 皇室称号
-    r".+[宣文武成景明]$",           # 常见谥号用字（如司马"宣王"）
-    r"^.{1,2}[帝后王]$",           # 短名+皇室称号（"文帝""明帝"）
-    r".+[太守刺史将军相国]$",        # 以官名结尾但不是完整姓名的
+    r".+[王公侯伯子男]$",
+    r"^[某].+[帝王后妃]$",
+    r".+[宣文武成景明]$",
+    r"^.{1,2}[帝后王]$",
+    r".+[太守刺史将军相国]$",
 ]
 
-
 def _is_suspect_name(name: str) -> bool:
-    import re
     for pat in _SUSPECT_NAME_PATTERNS:
         if re.match(pat, name):
             return True
     return False
 
 
-PERSON_REQUIRED_FIELDS = ["姓名"]
-PERSON_OPTIONAL_DEFAULTS: dict[str, object] = {
-    "字": "无考",
-    "号": "无考",
-    "其他名号": [],
-    "朝代": ["无考"],
-    "生年": None,
-    "卒年": None,
-    "出生地": "无考",
-    "出生地今名": "无考",
-    "卒地": "无考",
-    "卒地今名": "无考",
-    "历任势力": [],
-    "官职": [],
-    "爵位": [],
-    "卒因": "不详",
-    "关系": [],
-    "参与事件": [],
-    "生平概述": "",
-}
-
-PERSON_ARRAY_FIELDS = {
-    "历任势力", "官职", "爵位", "关系", "参与事件",
-}
-
-VALID_RELATION_TYPES = {
-    "父子", "母子", "兄弟", "姐妹", "夫妻", "叔侄", "舅甥", "祖孙",
-    "君臣", "同僚", "师生", "朋友", "敌对", "举荐", "幕僚", "先祖",
-}
-
-
 class JsonParser:
+    def __init__(self, era=None):
+        """era: BaseEra 实例，提供 schema 和关系类型"""
+        self.era = era
+
+    def _valid_relation_types(self) -> set[str]:
+        if self.era:
+            return self.era.relation_types
+        return {"父子","母子","兄弟","姐妹","夫妻","叔侄","舅甥","祖孙",
+                "君臣","同僚","师生","朋友","敌对","举荐","幕僚","先祖"}
+
+    def _person_defaults(self) -> dict:
+        if self.era:
+            return dict(self.era.person_defaults)
+        return {
+            "字":"无考","号":"无考","朝代":["无考"],
+            "生年":None,"卒年":None,
+            "出生地":"","出生地今名":"","卒地":"","卒地今名":"",
+            "历任势力":[],"官职":[],"爵位":[],"关系":[],"参与事件":[],
+            "生平概述":"",
+        }
+
+    def _person_array_fields(self) -> set[str]:
+        if self.era:
+            return set(self.era.person_array_fields)
+        return {"历任势力","官职","爵位","关系","参与事件"}
+
     @staticmethod
     def extract_json(text: str) -> list[dict] | dict:
         if not text or not text.strip():
             raise JsonParseError("LLM 返回空文本")
-
         cleaned = text.strip()
-
         fence_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
         if fence_match:
             cleaned = fence_match.group(1).strip()
-
         json_start = None
         for i, ch in enumerate(cleaned):
             if ch in ("[", "{"):
                 json_start = i
                 break
-
         if json_start is None:
             raise JsonParseError("未找到 JSON 结构", raw_text=text[:500])
-
         closer = "]" if cleaned[json_start] == "[" else "}"
         depth = 0
         json_end = None
@@ -99,56 +83,49 @@ class JsonParser:
                 if depth == 0:
                     json_end = i + 1
                     break
-
         if json_end is None:
             raise JsonParseError("JSON 未闭合", raw_text=text[:500])
-
         candidate = cleaned[json_start:json_end]
         try:
             return json.loads(candidate)
         except json.JSONDecodeError as e:
             raise JsonParseError(f"JSON 解析失败: {e}", raw_text=candidate[:500])
 
-    @staticmethod
-    def validate_person(data: dict) -> dict:
-        for field in PERSON_REQUIRED_FIELDS:
-            if field not in data or data[field] is None:
-                raise SchemaValidationError(field, f"缺少必需字段 '{field}'")
+    def validate_person(self, data: dict) -> dict:
+        if "姓名" not in data or data["姓名"] is None:
+            raise SchemaValidationError("姓名", "缺少必需字段 '姓名'")
 
-        validated: dict = {}
-        validated["id"] = str(uuid.uuid4())
-        validated["姓名"] = data["姓名"]
+        defaults = self._person_defaults()
+        validated: dict = {"id": str(uuid.uuid4()), "姓名": data["姓名"]}
 
-        for key, default in PERSON_OPTIONAL_DEFAULTS.items():
+        for key, default in defaults.items():
             val = data.get(key)
             if val is not None and val != "" and val != []:
                 validated[key] = val
             else:
                 validated[key] = default
 
-        if not isinstance(validated["朝代"], list):
+        if not isinstance(validated.get("朝代"), list):
             validated["朝代"] = [validated["朝代"]] if validated["朝代"] != "无考" else ["无考"]
 
-        for field in PERSON_ARRAY_FIELDS:
+        for field in self._person_array_fields():
             if field not in validated or not isinstance(validated[field], list):
                 validated[field] = []
 
-        JsonParser._normalize_relations(validated)
+        self._normalize_relations(validated)
 
-        # 过滤单名或疑似碎片名（如"丕""叡""髦"——LLM 漏了姓氏）
         name = validated["姓名"]
         if len(name) <= 2 and not _is_suspect_name(name):
-            if name in ("丕", "叡", "髦", "奂", "芳", "询", "懿", "亮", "羽", "飞"):
+            if name in ("丕","叡","髦","奂","芳","询","懿","亮","羽","飞"):
                 validated["_reject"] = True
 
-        # 自动标记疑似爵号/官名的"姓名"
-        if _is_suspect_name(validated["姓名"]):
+        if _is_suspect_name(name):
             validated.setdefault("_审核标记", "疑似姓名非本名，请人工确认")
 
         return validated
 
-    @staticmethod
-    def _normalize_relations(person: dict):
+    def _normalize_relations(self, person: dict):
+        valid_types = self._valid_relation_types()
         cleaned = []
         for rel in person.get("关系", []):
             if not isinstance(rel, dict):
@@ -157,41 +134,34 @@ class JsonParser:
             rtype = rel.get("关系类型", "")
             if not target:
                 continue
-            if rtype not in VALID_RELATION_TYPES:
+            if rtype not in valid_types:
                 rtype = "同僚"
             cleaned.append({"人物": target, "关系类型": rtype})
         person["关系"] = cleaned
 
-    @staticmethod
-    def parse_with_retry(llm_client, system_prompt: str, user_message: str,
+    def parse_with_retry(self, llm_client, system_prompt: str, user_message: str,
                          max_retries: int = 3) -> list[dict]:
         last_error = ""
         for attempt in range(max_retries):
             full_user = user_message
             if last_error:
                 full_user = f"{user_message}\n\n[上一轮解析错误，请修正]\n{last_error}"
-
             raw_response = llm_client.chat_with_retry(system_prompt, full_user)
             if raw_response is None:
                 last_error = "LLM 返回 None"
                 continue
-
             try:
-                parsed = JsonParser.extract_json(raw_response)
+                parsed = self.extract_json(raw_response)
             except JsonParseError as e:
                 last_error = str(e)
                 continue
-
             if isinstance(parsed, dict):
                 parsed = [parsed]
-
             try:
-                validated = [JsonParser.validate_person(p) for p in parsed]
-                return validated
+                return [self.validate_person(p) for p in parsed]
             except SchemaValidationError as e:
                 last_error = str(e)
                 continue
-
         raise JsonParseError(f"JSON 解析失败（已重试 {max_retries} 次）: {last_error}")
 
     @staticmethod
@@ -214,33 +184,27 @@ class JsonParser:
             raise SchemaValidationError("事件名称", "事件名称不能为空")
         return validated
 
-    @staticmethod
-    def parse_event_with_retry(llm_client, system_prompt: str, user_message: str,
+    def parse_event_with_retry(self, llm_client, system_prompt: str, user_message: str,
                                max_retries: int = 3) -> list[dict]:
         last_error = ""
         for attempt in range(max_retries):
             full_user = user_message
             if last_error:
                 full_user = f"{user_message}\n\n[上一轮解析错误，请修正]\n{last_error}"
-
             raw_response = llm_client.chat_with_retry(system_prompt, full_user)
             if raw_response is None:
                 last_error = "LLM 返回 None"
                 continue
-
             try:
-                parsed = JsonParser.extract_json(raw_response)
+                parsed = self.extract_json(raw_response)
             except JsonParseError as e:
                 last_error = str(e)
                 continue
-
             if isinstance(parsed, dict):
                 parsed = [parsed]
-
             try:
-                return [JsonParser.validate_event(p) for p in parsed]
+                return [self.validate_event(p) for p in parsed]
             except SchemaValidationError as e:
                 last_error = str(e)
                 continue
-
         raise JsonParseError(f"事件 JSON 解析失败（已重试 {max_retries} 次）: {last_error}")

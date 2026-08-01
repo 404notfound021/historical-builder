@@ -16,11 +16,12 @@ class ExtractionError(Exception):
 
 
 class Extractor:
-    def __init__(self, llm_client, book_config: dict, prompt_dir: Path, intermediate_dir: Path):
+    def __init__(self, llm_client, book_config: dict, prompt_dir: Path, intermediate_dir: Path, era=None):
         self.llm = llm_client
         self.book_config = book_config
         self.prompt_dir = prompt_dir
         self.intermediate_dir = intermediate_dir
+        self.parser = JsonParser(era)
 
         prompt_override = book_config.get("prompt_override", {})
         person_prompt_file = prompt_override.get("person") or "common_extract_person.md"
@@ -88,7 +89,7 @@ class Extractor:
 
     def _call_llm(self, user_message: str, chapter: Chapter, chunk_idx: int = 0) -> list[dict]:
         try:
-            return JsonParser.parse_with_retry(
+            return self.parser.parse_with_retry(
                 self.llm, self.person_prompt, user_message, max_retries=3
             )
         except JsonParseError as e:
