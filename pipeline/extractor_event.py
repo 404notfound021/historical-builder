@@ -24,7 +24,9 @@ class EventExtractor:
         self.book_config = book_config
         self.prompt_dir = prompt_dir
         self.intermediate_dir = intermediate_dir
-        self.event_prompt = (prompt_dir / "common_extract_event.md").read_text(encoding="utf-8")
+        prompt_override = book_config.get("prompt_override", {})
+        event_prompt_file = prompt_override.get("event") or "common_extract_event.md"
+        self.event_prompt = (prompt_dir / event_prompt_file).read_text(encoding="utf-8")
 
     def extract_chapter(self, chapter: Chapter) -> list[dict]:
         output_path = self.intermediate_dir / f"ch_{chapter.index:04d}_events.json"

@@ -46,7 +46,7 @@ position_normalization:
 processing:
   chunk_overlap: 200
   chunk_size: 2000
-relation_types:
+relation_types_base:
 - 父子
 - 母子
 - 兄弟
@@ -56,6 +56,7 @@ relation_types:
 - 舅甥
 - 祖孙
 - 君臣
+- 臣属
 - 同僚
 - 师生
 - 朋友
@@ -63,6 +64,29 @@ relation_types:
 - 举荐
 - 幕僚
 - 先祖
+relation_types_literary:
+- 恋人
+- 主仆
+- 妾室
+- 姑侄
+- 姨甥
+- 表亲
+- 妯娌
+- 连襟
+- 堂亲
+era_filters:
+  ancient:
+    bad_position_terms:
+    - 夫人
+    - 皇帝
+    - 皇后
+    - 太子
+    - 太后
+    - 王子
+    - 公主
+    - 世子
+  literary:
+    bad_position_terms: []
 schema_ancient:
   base:
   - name: 姓名

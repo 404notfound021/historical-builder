@@ -8,8 +8,66 @@ def _s(s):
     return s.strip()
 
 INVAL={'无考','','None','none','null','不详'}
-RT={'父子':'子','母子':'子','父':'子','母':'子','子':'父子','女':'女','兄弟':'兄弟','夫妻':'夫妻','君臣':'臣属','臣属':'臣属','同僚':'同僚','朋友':'朋友','敌对':'敌对','师生':'师生','先祖':'先祖','叔侄':'叔侄','直系祖先':'先祖','第二任妻':'夫妻','第三任妻':'夫妻','次子':'子','长子':'子','女兒':'女','女婿':'女婿'}
-REV={'子':'父子','女':'父子','女':'父子','兄弟':'兄弟','夫妻':'夫妻','臣属':'君臣','朋友':'朋友','敌对':'敌对','先祖':'先祖','叔侄':'叔侄','师生':'学生'}
+
+# ── Base relation maps (universal, all eras) ──
+BASE_RT={
+    '父子':'子','母子':'子','父':'子','母':'子','子':'父子','女':'女','女兒':'女',
+    '兄弟':'兄弟','姐妹':'姐妹',
+    '夫妻':'夫妻','第二任妻':'夫妻','第三任妻':'夫妻',
+    '祖孙':'祖孙','先祖':'先祖','直系祖先':'先祖',
+    '叔侄':'叔侄','舅甥':'舅甥',
+    '君臣':'臣属','臣属':'臣属',
+    '同僚':'同僚','朋友':'朋友','敌对':'敌对',
+    '师生':'师生','幕僚':'主公','举荐':'被举荐',
+    '次子':'子','长子':'子','女婿':'女婿',
+}
+BASE_REV={
+    '子':'父子','女':'父子',
+    '兄弟':'兄弟','姐妹':'姐妹',
+    '夫妻':'夫妻','祖孙':'祖孙','先祖':'先祖',
+    '叔侄':'叔侄','舅甥':'舅甥',
+    '臣属':'君臣','同僚':'同僚','朋友':'朋友','敌对':'敌对',
+    '学生':'师生','主公':'幕僚','被举荐':'举荐',
+    '女婿':'岳婿',
+}
+
+# ── Literary enrichment ──
+LITERARY_RT={
+    '恋人':'恋人',
+    '主仆':'仆从',
+    '妾室':'妾室',
+    '姑侄':'姑侄',
+    '姨甥':'姨甥',
+    '表亲':'表亲',
+    '妯娌':'妯娌',
+    '连襟':'连襟',
+    '堂亲':'堂亲',
+    '养父子':'子','养母子':'子',
+}
+LITERARY_REV={
+    '恋人':'恋人',
+    '仆从':'主仆',
+    '妾室':'妾室',
+    '姑侄':'姑侄',
+    '姨甥':'姨甥',
+    '表亲':'表亲',
+    '妯娌':'妯娌',
+    '连襟':'连襟',
+    '堂亲':'堂亲',
+}
+
+# ── Era-aware constants ──
+ANCIENT_TITLE_FIX={
+    '高贵乡公髦':('曹髦',[{'类型':'谥号','名称':'高贵乡公'}]),
+    '陈留王奂':('曹奂',[{'类型':'爵号','名称':'陈留王'}]),
+    '齐王芳':('曹芳',[{'类型':'爵号','名称':'齐王'}]),
+}
+ANCIENT_DYNASTIES={'东汉','西汉','曹魏','蜀汉','东吴','西晋','东晋','倭国'}
+ANCIENT_PLACE_GENERIC={'吴地':'扬州','蜀地':'益州','魏地':'中原','秦地':'关中'}
+ANCIENT_GARBAGE=['-东汉','-曹魏','-蜀汉','-东吴','魏晋','曹魏-','皇帝','群臣','百官','公卿']
+
+ANCIENT_BAD_POS={'夫人','皇帝','皇后','太子','太后','王子','公主','世子','无考'}
+LITERARY_BAD_POS={'无考'}  # literary: only filter placeholder values
 
 class Normalizer:
     def __init__(self, book_config, global_config):
@@ -17,6 +75,25 @@ class Normalizer:
         self.gc=global_config
         self.pn=global_config.get('place_normalization',{})
         self.dyn=book_config.get('dynasty_name','')
+        self.era=book_config.get('era','ancient')
+
+        # Build effective RT/REV: base + era enrichment
+        self.RT=dict(BASE_RT)
+        self.REV=dict(BASE_REV)
+        if self.era=='literary':
+            self.RT.update(LITERARY_RT)
+            self.REV.update(LITERARY_REV)
+
+        # Era-aware filter sets
+        self.bad_pos=LITERARY_BAD_POS if self.era=='literary' else ANCIENT_BAD_POS
+        self.title_fix=ANCIENT_TITLE_FIX
+        self.dynasty_stubs=ANCIENT_DYNASTIES
+        self.place_generic=ANCIENT_PLACE_GENERIC
+        self.garbage_names=ANCIENT_GARBAGE
+
+        # Era filters from config (override bad_position_terms)
+        era_cfg=global_config.get('era_filters',{}).get(self.era,{})
+        self.bad_terms=era_cfg.get('bad_position_terms',[])
 
     def run(self, persons, events):
         print('--- Normalize ---')
@@ -33,7 +110,7 @@ class Normalizer:
             for r in p['关系']:
                 if not isinstance(r,dict): continue
                 rt=r.get('关系类型','')
-                if rt in RT: r['关系类型']=RT[rt]
+                if rt in self.RT: r['关系类型']=self.RT[rt]
             seen=set();clean=[]
             for r in p['关系']:
                 if not isinstance(r,dict): continue
@@ -44,7 +121,7 @@ class Normalizer:
         # Reverse
         for p in persons:
             for r in p.get('关系',[]):
-                t=r.get('人物','');rt=r.get('关系类型','');rv=REV.get(rt)
+                t=r.get('人物','');rt=r.get('关系类型','');rv=self.REV.get(rt)
                 if not rv or t not in idx: continue
                 tp=idx[t];tp.setdefault('关系',[])
                 ex={(x.get('人物',''),x.get('关系类型','')) for x in tp['关系']}
@@ -79,11 +156,11 @@ class Normalizer:
             loc=re.sub(r'之[南北东西]$','',loc)
             if loc in self.pn: e['地点']=self.pn[loc]
             else: e['地点']=loc
-        # Generic places
-        PG={'吴地':'扬州','蜀地':'益州','魏地':'中原','秦地':'关中'}
-        for e in events:
-            loc=e.get('地点','')
-            if loc in PG: e['地点']=PG[loc]
+        # Generic place mapping (ancient only)
+        if self.era=='ancient':
+            for e in events:
+                loc=e.get('地点','')
+                if loc in self.place_generic: e['地点']=self.place_generic[loc]
 
         print('  3. Event-Person sync')
 
@@ -95,15 +172,12 @@ class Normalizer:
             p['关系']=[r for r in p.get('关系',[]) if r.get('人物','') not in INVAL]
 
         # Era-aware position filter
-        era=self.bc.get('era','ancient')
-        era_cfg=self.gc.get('era_filters',{}).get(era,{})
-        bad_terms=era_cfg.get('bad_position_terms',[])
-        if bad_terms:
+        if self.bad_terms:
             for p in persons:
                 if '官职' in p:
-                    p['官职']=[o for o in p['官职'] if not any(t in o.get('名称','') for t in bad_terms)]
+                    p['官职']=[o for o in p['官职'] if not any(t in o.get('名称','') for t in self.bad_terms)]
 
-        # Position/peerage name dedup (same name → keep first with time info)
+        # Position/peerage name dedup
         for p in persons:
             for f in ['官职','爵位','历任势力']:
                 if f not in p: continue
@@ -127,34 +201,30 @@ class Normalizer:
                     if key not in seen: seen.add(key);clean.append(item)
                 p[f]=clean
 
-        # Title fix + position/peerage filter
-        TITLE_FIX={'高贵乡公髦':('曹髦',[{'类型':'谥号','名称':'高贵乡公'}]),'陈留王奂':('曹奂',[{'类型':'爵号','名称':'陈留王'}]),'齐王芳':('曹芳',[{'类型':'爵号','名称':'齐王'}])}
-        BAD_POS={'夫人','皇帝','皇后','太子','太后','王子','公主','世子','无考'}
+        # Title fix (ancient only)
         for p in persons:
             name=p.get('姓名','')
-            if name in TITLE_FIX:
-                nn,alt=TITLE_FIX[name];p['姓名']=nn
+            if name in self.title_fix:
+                nn,alt=self.title_fix[name];p['姓名']=nn
                 p.setdefault('其他名号',[])
                 for a in alt:
                     if a not in p['其他名号']: p['其他名号'].append(a)
-            if '官职' in p: p['官职']=[o for o in p['官职'] if o.get('名称','') not in BAD_POS]
-            if '爵位' in p: p['爵位']=[j for j in p['爵位'] if j.get('爵名','') not in BAD_POS]
+            if '官职' in p: p['官职']=[o for o in p['官职'] if o.get('名称','') not in self.bad_pos]
+            if '爵位' in p: p['爵位']=[j for j in p['爵位'] if j.get('爵名','') not in self.bad_pos]
 
-        # Dynasty stubs
-        DYNASTIES={'东汉','西汉','曹魏','蜀汉','东吴','西晋','东晋','倭国'}
-        for d in DYNASTIES:
-            if d not in pnames: pnames.add(d);persons.append(self._stub(d))
+        # Dynasty stubs (ancient only)
+        if self.era=='ancient':
+            for d in self.dynasty_stubs:
+                if d not in pnames: pnames.add(d);persons.append(self._stub(d))
 
         # Filter garbage names
-        garbage=['-东汉','-曹魏','-蜀汉','-东吴','魏晋','曹魏-','皇帝','群臣','百官','公卿']
-        persons=[p for p in persons if not any(g in p.get('姓名','') for g in garbage)]
+        persons=[p for p in persons if not any(g in p.get('姓名','') for g in self.garbage_names)]
         pnames={p['姓名'] for p in persons}
 
         # Relation stub targets
         for p in persons:
             for r in p.get('关系',[]):
                 tgt=r.get('人物','')
-                # Clean (role) suffix
                 tgt=re.sub(r'\([^)]+\)','',tgt).strip()
                 r['人物']=tgt
                 if tgt and tgt not in INVAL and tgt not in pnames:

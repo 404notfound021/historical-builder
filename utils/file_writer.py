@@ -43,6 +43,9 @@ class FileWriter:
         return self._write_if_changed(output_dir, filename, rendered)
 
     def _build_output_dir(self, book_config: dict, folder_name: str) -> Path:
+        subdir = book_config.get('output_subdir', '')
+        if subdir:
+            return self.obsidian_root / self.output_base / subdir / folder_name
         return self.obsidian_root / self.output_base / folder_name
 
     def _make_filename(self, name: str, dynasties: list) -> str:
