@@ -101,11 +101,16 @@ class Normalizer:
                         r['人物'] = clean_name
 
         # Pre-step: Ensure all referenced dynasties have stub nodes
-        DYNASTIES = {'东汉','西汉','曹魏','蜀汉','东吴','西晋','东晋','倭国','曹魏/东汉','东汉/曹魏'}
+        DYNASTIES = {'东汉','西汉','曹魏','蜀汉','东吴','西晋','东晋','倭国'}
         for d in DYNASTIES:
             if d not in pnames:
                 pnames.add(d)
                 persons.append(self._stub(d))
+
+        # Filter garbage names from person list (compound dynasties, generic titles)
+        garbage_patterns = ['-东汉','-曹魏','-蜀汉','-东吴','魏晋','曹魏-','皇帝','群臣','百官','公卿']
+        persons = [p for p in persons if not any(g in p.get('姓名','') for g in garbage_patterns)]
+        pnames = {p['姓名'] for p in persons}
 
         # Step: Create stubs for ALL missing relation targets
         for p in persons:
