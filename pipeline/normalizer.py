@@ -103,11 +103,14 @@ class Normalizer:
 
         print('  3. Event-Person sync')
 
-        # Filter invalids
+        # Filter invalids / normalize dynasty
         for p in persons:
             for f in ['出生地今名','卒地今名','出生地','卒地']:
                 if p.get(f) in INVAL: p[f]=''
             p['朝代']=[d for d in p.get('朝代',[]) if d not in INVAL]
+            # Literary era: override all dynasties to book's dynasty (LLM hallucination fix)
+            if self.era and hasattr(self.era, 'dynasty_override') and self.era.dynasty_override:
+                p['朝代'] = [self.era.dynasty_override]
             p['关系']=[r for r in p.get('关系',[]) if r.get('人物','') not in INVAL]
 
         # Position/peerage name dedup

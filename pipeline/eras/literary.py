@@ -7,6 +7,10 @@ class LiteraryEra(BaseEra):
     source_type = "文学"
     source_heading = "出处文献"
 
+    @property
+    def dynasty_override(self):
+        return self.bc.get("dynasty_name", "")  # 清
+
     def __init__(self, book_config, global_config):
         super().__init__(book_config, global_config)
 

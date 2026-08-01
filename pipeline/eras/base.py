@@ -10,6 +10,7 @@ class BaseEra:
     source_type: str = "文献"          # 源节点类型名
     source_folder_default: str = "文献"
     source_heading: str = "史料出处"   # 模板中的出处标题
+    dynasty_override: str = None       # 若设置，强制覆盖无考/空朝代
 
     # ── 模板 ──
     template_person: str = "person_template.md"
