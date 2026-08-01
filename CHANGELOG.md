@@ -1,3 +1,18 @@
+## v2.2.1 (2026-08-01)
+
+### Fixed
+- **四括号彻底消除**: Normalizer→CBDB→Normalizer 执行顺序修正 + render 末尾自动扫描修复
+- **模板字段粘合**: YAML frontmatter 中空字段导致后续字段拼接在同一行
+- **"高贵乡公髦"→"曹髦"**: 爵号做姓名 + "夫人"非官职的 LLM 幻觉后处理
+- **iCloud 文件回滚**: render 末尾自动扫描修复被 iCloud 回滚的四括号文件
+
+### Changed
+- Normalizer 改为永远运行（不再依赖 linked_events 存在）
+- CBDB 不再向数据中添加 [[wikilink]] 标记
+- 模板 `_strip_wikilink` 改为递归剥除
+- 模板关键信息段加入 `or '无考'` 默认值
+
+
 ## v2.2.0 (2026-08-01)
 
 ### Added

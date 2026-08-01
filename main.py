@@ -144,24 +144,6 @@ def main():
         renderer = TemplateRenderer(PROJECT_ROOT / "resource" / "templates")
         writer = FileWriter(str(obsidian_root), global_config["output_base"], renderer)
 
-        # 5.0: NORMALIZE — 统一数据合同
-        from pipeline.normalizer import Normalizer
-        nz = Normalizer(book_config, global_config)
-
-        # Load events
-        events_path = intermediate_dir / "linked_events.json"
-        linked_events = None
-        if events_path.exists():
-            linked_events = json.loads(events_path.read_text(encoding="utf-8"))
-
-        if linked_events:
-            resolved, linked_events = nz.run(resolved, linked_events)
-            (intermediate_dir / "linked_events.json").write_text(
-                json.dumps(linked_events, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-        else:
-            print("  跳过 Normalize: 无事件数据")
-
 
         from pipeline.incremental_writer import IncrementalWriter
         from pipeline.provenance_tracker import ProvenanceTracker
@@ -188,6 +170,22 @@ def main():
             print(f"  CBDB 补全: {enriched_count}/{len(resolved)} 人")
         else:
             print("  CBDB: 数据库未找到，跳过补全")
+
+        # 5.0: NORMALIZE — 统一数据合同
+        from pipeline.normalizer import Normalizer
+        nz = Normalizer(book_config, global_config)
+
+        # Load events
+        events_path = intermediate_dir / "linked_events.json"
+        linked_events = None
+        if events_path.exists():
+            linked_events = json.loads(events_path.read_text(encoding="utf-8"))
+
+        resolved, linked_events = nz.run(resolved, linked_events or [])
+        if linked_events:
+            (intermediate_dir / "linked_events.json").write_text(
+                json.dumps(linked_events, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
         # 5a: 增量写入人物 + 溯源
         person_stats = {"新建": 0, "合并": 0, "跳过": 0}
@@ -279,6 +277,26 @@ id: {source_data['id']}
             for f in glob.glob(pattern):
                 try: os.remove(f)
                 except Exception: pass
+        
+        # 修复四括号：iCloud 回滚导致的 [[[[name]]]] → [[name]]
+        from pipeline.normalizer import _s as _strip_br
+        import glob as _glob
+        quad_fixed = 0
+        for subdir in ["人物", "事件"]:
+            pattern = str(writer.obsidian_root / writer.output_base / subdir / "*.md")
+            for fpath in _glob.glob(pattern):
+                try:
+                    content = open(fpath).read()
+                    if "[[" not in content:
+                        continue
+                    # Replace [[[[name]]]] → [[name]]
+                    fixed = content.replace("[[[[", "[[").replace("]]]]", "]]")
+                    if fixed != content:
+                        open(fpath, "w").write(fixed)
+                        quad_fixed += 1
+                except: pass
+        if quad_fixed:
+            print(f"    四括号修复: {quad_fixed} 个文件")
         state.mark_phase_done("render")
 
     # ===== Dry run =====

@@ -213,7 +213,7 @@ class CBDBEnricher:
             if not kname or not krel:
                 continue
             if (kname, krel) not in exist_kins:
-                person.setdefault("关系", []).append({"人物": f"[[{kname}]]", "关系类型": krel})
+                person.setdefault("关系", []).append({"人物": kname, "关系类型": krel})
 
         # --- 官职 ---
         exist_offices = {o.get("名称", "") for o in person.get("官职", [])}

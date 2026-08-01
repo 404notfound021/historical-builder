@@ -114,6 +114,26 @@ class Normalizer:
                     if key not in seen: seen.add(key);clean.append(item)
                 p[f]=clean
 
+        # 5. Post: fix title-as-name (高贵乡公髦→曹髦) + filter non-positions
+        TITLE_FIX = {
+            '高贵乡公髦': ('曹髦', [{'类型':'谥号','名称':'高贵乡公'}]),
+            '陈留王奂': ('曹奂', [{'类型':'爵号','名称':'陈留王'}]),
+            '齐王芳': ('曹芳', [{'类型':'爵号','名称':'齐王'}]),
+        }
+        BAD_POSITIONS = {'夫人', '皇帝', '皇后', '太子', '太后', '王子', '公主', '世子', '无考'}
+        for p in persons:
+            name = p.get('姓名','')
+            if name in TITLE_FIX:
+                new_name, altnames = TITLE_FIX[name]
+                p['姓名'] = new_name
+                p.setdefault('其他名号',[])
+                for a in altnames:
+                    if a not in p['其他名号']: p['其他名号'].append(a)
+            if '官职' in p:
+                p['官职'] = [o for o in p['官职'] if o.get('名称','') not in BAD_POSITIONS]
+            if '爵位' in p:
+                p['爵位'] = [j for j in p['爵位'] if j.get('爵名','') not in BAD_POSITIONS]
+        print(f'  5. Title fix + position filter done')
         print(f'  4. Done: {len(persons)} persons, {len(events)} events, {len(pnames)} names')
         return persons, events
 
