@@ -135,6 +135,14 @@ def main():
         return resolved
 
     # ===== Phase 5: Render & Write =====
+    def _clean_icloud_dupes(writer):
+        import glob as _g
+        for sub in ["人物","事件","地名","职官","MOC"]:
+            p = str(writer.obsidian_root / writer.output_base / sub / "* 2.md")
+            for f in _g.glob(p):
+                try: os.remove(f)
+                except: pass
+
     def phase_render():
         resolved = json.loads((intermediate_dir / "resolved_persons.json").read_text(encoding="utf-8"))
         chapters_data = json.loads((intermediate_dir / "chapters.json").read_text(encoding="utf-8"))
@@ -144,6 +152,8 @@ def main():
         renderer = TemplateRenderer(PROJECT_ROOT / "resource" / "templates")
         writer = FileWriter(str(obsidian_root), global_config["output_base"], renderer)
 
+        # Clean iCloud dupes before writing (writer now available)
+        _clean_icloud_dupes(writer)
 
         from pipeline.incremental_writer import IncrementalWriter
         from pipeline.provenance_tracker import ProvenanceTracker
