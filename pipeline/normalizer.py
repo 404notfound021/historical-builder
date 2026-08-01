@@ -100,6 +100,13 @@ class Normalizer:
                     if clean_name and clean_name != tgt:
                         r['人物'] = clean_name
 
+        # Pre-step: Ensure all referenced dynasties have stub nodes
+        DYNASTIES = {'东汉','西汉','曹魏','蜀汉','东吴','西晋','东晋','倭国','曹魏/东汉','东汉/曹魏'}
+        for d in DYNASTIES:
+            if d not in pnames:
+                pnames.add(d)
+                persons.append(self._stub(d))
+
         # Step: Create stubs for ALL missing relation targets
         for p in persons:
             for r in p.get('关系', []):

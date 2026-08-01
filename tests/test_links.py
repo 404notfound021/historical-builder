@@ -44,7 +44,7 @@ def test_no_broken_person_links(all_nodes, all_links):
         # Skip position names
         if any(target.endswith(s) for s in POSITION_SUFFIXES): continue
         # Skip dynasty-alikes (single names)
-        if target in ('东汉','西汉','曹魏','蜀汉','东吴','西晋','东晋','倭国'): continue
+        
         broken.append((target, sorted(sources)))
     if broken:
         msg = f'{len(broken)} broken links found:\n'
