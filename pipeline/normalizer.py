@@ -107,7 +107,16 @@ class Normalizer:
                 pnames.add(d)
                 persons.append(self._stub(d))
 
-        # Filter garbage names from person list (compound dynasties, generic titles)
+        # Filter anachronistic positions (post-Han bureaucratic terms in 三国)
+BUREAUCRATIC_TERMS = {'郎中','主事','員外郎','尚書省','職方司','按察司','布政司',
+    '巡撫','總督','知縣','知州','知府','知某','通判','縣丞','縣令','縣尹',
+    '訓導','巡檢','把總','千總','守備','文選司','屯田司','都官司'}
+for p in persons:
+    if '官职' in p:
+        p['官职'] = [o for o in p['官职'] 
+                     if not any(t in o.get('名称','') for t in BUREAUCRATIC_TERMS)]
+
+# Filter garbage names from person list (compound dynasties, generic titles)
         garbage_patterns = ['-东汉','-曹魏','-蜀汉','-东吴','魏晋','曹魏-','皇帝','群臣','百官','公卿']
         persons = [p for p in persons if not any(g in p.get('姓名','') for g in garbage_patterns)]
         pnames = {p['姓名'] for p in persons}
