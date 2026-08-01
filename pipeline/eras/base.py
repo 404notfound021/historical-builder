@@ -9,6 +9,7 @@ class BaseEra:
     label: str = "人物"                # 标签，如"历史人物"/"文学人物"
     source_type: str = "文献"          # 源节点类型名
     source_folder_default: str = "文献"
+    source_heading: str = "史料出处"   # 模板中的出处标题
 
     # ── 模板 ──
     template_person: str = "person_template.md"

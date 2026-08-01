@@ -5,6 +5,7 @@ from pipeline.eras.base import BaseEra
 class LiteraryEra(BaseEra):
     label = "文学人物"
     source_type = "文学"
+    source_heading = "出处文献"
 
     def __init__(self, book_config, global_config):
         super().__init__(book_config, global_config)

@@ -143,37 +143,13 @@ def main():
         return resolved
 
     # ===== Phase 5: Render & Write =====
-    def _clean_icloud_dupes(writer, book_config):
-        import glob as _g
-        for sub in ["人物","事件","地名","职官","MOC"]:
-            d = writer._build_output_dir(book_config, sub)
-            p = str(d / "* 2.md")
-            for f in _g.glob(p):
-                try: os.remove(f)
-                except: pass
-
-    def phase_render():
+    # ===== Phase 7: Normalize =====
+    def phase_normalize():
         resolved = json.loads((intermediate_dir / "resolved_persons.json").read_text(encoding="utf-8"))
-        chapters_data = json.loads((intermediate_dir / "chapters.json").read_text(encoding="utf-8"))
-        chapter_titles = {c["index"]: c["title"] for c in chapters_data}
+        events_path = intermediate_dir / "linked_events.json"
+        linked_events = json.loads(events_path.read_text(encoding="utf-8")) if events_path.exists() else []
 
-        metadata = MetadataInjector(book_config, chapter_titles)
-        renderer = TemplateRenderer(PROJECT_ROOT / "resource" / "templates", era)
-        writer = FileWriter(str(obsidian_root), global_config["output_base"], renderer)
-
-        # Clean iCloud dupes before writing (writer now available)
-        _clean_icloud_dupes(writer, book_config)
-
-        from pipeline.incremental_writer import IncrementalWriter
-        from pipeline.provenance_tracker import ProvenanceTracker
-        from pipeline.moc_generator import MocGenerator
-
-        inc_writer = IncrementalWriter(writer)
-        provenance = ProvenanceTracker(
-            PROJECT_ROOT / "output" / book_name / "provenance.json", book_name
-        )
-
-        # 0.5: Enrichment (CBDB for ancient, no-op for literary)
+        # Enrichment (CBDB for ancient, no-op for literary)
         if hasattr(era, 'enrich_person'):
             enriched_count = 0
             for person in resolved:
@@ -182,103 +158,103 @@ def main():
             if enriched_count:
                 print(f"  数据补全: {enriched_count}/{len(resolved)} 人")
 
-        # 5.0: NORMALIZE — 统一数据合同
         from pipeline.normalizer import Normalizer
         nz = Normalizer(book_config, global_config, era)
+        resolved, linked_events = nz.run(resolved, linked_events)
 
-        # Load events
-        events_path = intermediate_dir / "linked_events.json"
-        linked_events = None
-        if events_path.exists():
-            linked_events = json.loads(events_path.read_text(encoding="utf-8"))
-
-        resolved, linked_events = nz.run(resolved, linked_events or [])
-        if linked_events:
-            (intermediate_dir / "linked_events.json").write_text(
-                json.dumps(linked_events, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-        # Save normalized data back to disk (includes TITLE_FIX renames + garbage removal)
         (intermediate_dir / "resolved_persons.json").write_text(
-            json.dumps(resolved, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+            json.dumps(resolved, ensure_ascii=False, indent=2), encoding="utf-8")
+        (intermediate_dir / "linked_events.json").write_text(
+            json.dumps(linked_events, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        # 5.0b: 清理输出目录中的孤儿文件（上次run残留、已修复的垃圾节点）
+        state.mark_phase_done("normalize")
+        return resolved
+
+    # ===== Phase 8: Write =====
+    def phase_write():
+        resolved = json.loads((intermediate_dir / "resolved_persons.json").read_text(encoding="utf-8"))
+        chapters_data = json.loads((intermediate_dir / "chapters.json").read_text(encoding="utf-8"))
+        chapter_titles = {c["index"]: c["title"] for c in chapters_data}
+
+        metadata = MetadataInjector(book_config, chapter_titles)
+        renderer = TemplateRenderer(PROJECT_ROOT / "resource" / "templates", era)
+        writer = FileWriter(str(obsidian_root), global_config["output_base"], renderer)
+
+        # Orphan cleanup
         valid_names = {re.sub(r'[<>:"/\\|?*]', '-', p['姓名']) for p in resolved}
         person_dir = writer._build_output_dir(book_config, "人物")
         if person_dir.exists():
             orphan_cleaned = 0
             for f in list(person_dir.glob("*.md")):
                 if f.stem not in valid_names:
-                    f.unlink()
-                    orphan_cleaned += 1
+                    f.unlink(); orphan_cleaned += 1
             if orphan_cleaned:
                 print(f"    孤儿文件清理: {orphan_cleaned} 个")
 
-        # 5a: 增量写入人物 + 溯源
+        from pipeline.incremental_writer import IncrementalWriter
+        from pipeline.provenance_tracker import ProvenanceTracker
+        inc_writer = IncrementalWriter(writer)
+        provenance = ProvenanceTracker(PROJECT_ROOT / "output" / book_name / "provenance.json", book_name)
+
         person_stats = {"新建": 0, "合并": 0, "跳过": 0}
         for person in resolved:
             source_chapters = [idx for idx, _ in person.pop("_source_chapters", [])]
             person = metadata.inject(person, source_chapters)
-
             chapter_str = chapter_titles.get(source_chapters[0], "") if source_chapters else ""
             provenance.track_person(person, chapter_str)
-
-            # Era-aware label
             if "标签" not in person or not person["标签"]:
                 person["标签"] = [era.label]
-            # Template handles [[wikilink]] wrapping, no need to pre-wrap here
             path, written, status = inc_writer.write_person_incremental(book_config, person)
-            if "新建" in status:
-                person_stats["新建"] += 1
-            elif "合并" in status and written:
-                person_stats["合并"] += 1
-            else:
-                person_stats["跳过"] += 1
+            if "新建" in status: person_stats["新建"] += 1
+            elif "合并" in status and written: person_stats["合并"] += 1
+            else: person_stats["跳过"] += 1
 
         provenance.save()
         print(f"  人物: 新建 {person_stats['新建']}, 合并 {person_stats['合并']}, 跳过 {person_stats['跳过']}")
+        state.mark_phase_done("write")
 
-        # 5b: stub 生成
+    # ===== Phase 9: Stubs =====
+    def phase_stubs():
+        resolved = json.loads((intermediate_dir / "resolved_persons.json").read_text(encoding="utf-8"))
+        renderer = TemplateRenderer(PROJECT_ROOT / "resource" / "templates", era)
+        writer = FileWriter(str(obsidian_root), global_config["output_base"], renderer)
+
         from pipeline.stub_generator import StubGenerator
         stub_gen = StubGenerator(writer, renderer, book_config, global_config, intermediate_dir, era)
-        # 使用事件pipeline的数据（从raw_events.json读取，link阶段已写入linked_events）
+
         linked_events = None
         linked_path = intermediate_dir / "linked_events.json"
         if linked_path.exists():
             try: linked_events = json.loads(linked_path.read_text(encoding="utf-8"))
             except Exception: pass
+
         stats = stub_gen.generate_all(resolved, linked_events)
         for category, count in stats.items():
             print(f"  {category}: {count} 个")
+        state.mark_phase_done("stubs")
 
-        # 5c: 书籍源节点
-        source_type = era.source_type
+    # ===== Phase 10: Finalize =====
+    def phase_finalize():
+        resolved = json.loads((intermediate_dir / "resolved_persons.json").read_text(encoding="utf-8"))
+        renderer = TemplateRenderer(PROJECT_ROOT / "resource" / "templates", era)
+        writer = FileWriter(str(obsidian_root), global_config["output_base"], renderer)
+
+        # Source node
         source_folder = global_config.get("source_folder", era.source_folder_default)
-
-        source_data = {
-            "id": str(abs(hash(book_name)) % 10**16),
-            "类型": source_type,
-            "书名": book_name,
-            "作者": "",
-            "成书年代": "",
-            "体裁": "",
-            "内容概述": "",
-            "创建时间": datetime.now(timezone.utc).isoformat(),
-        }
         source_rendered = f"""---
-类型: {source_type}
-id: {source_data['id']}
-书名: {source_data['书名']}
-作者: {source_data['作者']}
-成书年代: {source_data['成书年代']}
-创建时间: {source_data['创建时间']}
+类型: {era.source_type}
+id: {str(abs(hash(book_name)) % 10**16)}
+书名: {book_name}
+作者:
+成书年代:
+体裁:
+创建时间: {datetime.now(timezone.utc).isoformat()}
 ---
 
 # {book_name}
 
 ## 概述
 
-{source_data['内容概述']}
 
 ## 已抽取人物
 
@@ -291,43 +267,23 @@ id: {source_data['id']}
         source_file = source_dir / f"{book_name}.md"
         if not source_file.exists():
             source_file.write_text(source_rendered, encoding="utf-8")
-            print(f"  + {source_type}: {book_name}.md")
+            print(f"  + {era.source_type}: {book_name}.md")
 
-        # 5d: MOC 生成
+        # MOC
+        from pipeline.moc_generator import MocGenerator
         moc_gen = MocGenerator(writer, book_config, global_config["output_base"])
         moc_count = moc_gen.generate(resolved)
         print(f"  MOC: {moc_count} 个")
 
-
-        # 清理 iCloud 冲突文件
+        # Clean iCloud conflict files
         import glob
-        for subdir in ["人物", "事件", "地名", "职官", "MOC"]:
+        for subdir in ["人物","事件","地名","职官","MOC"]:
             d = writer._build_output_dir(book_config, subdir)
-            pattern = str(d / "* 2.md")
-            for f in glob.glob(pattern):
+            for f in glob.glob(str(d / "* 2.md")):
                 try: os.remove(f)
                 except Exception: pass
-        
-        # 修复四括号：iCloud 回滚导致的 [[[[name]]]] → [[name]]
-        from pipeline.normalizer import _s as _strip_br
-        import glob as _glob
-        quad_fixed = 0
-        for subdir in ["人物", "事件"]:
-            pattern = str(writer.obsidian_root / writer.output_base / subdir / "*.md")
-            for fpath in _glob.glob(pattern):
-                try:
-                    content = open(fpath).read()
-                    if "[[" not in content:
-                        continue
-                    # Replace [[[[name]]]] → [[name]]
-                    fixed = content.replace("[[[[", "[[").replace("]]]]", "]]")
-                    if fixed != content:
-                        open(fpath, "w").write(fixed)
-                        quad_fixed += 1
-                except: pass
-        if quad_fixed:
-            print(f"    四括号修复: {quad_fixed} 个文件")
-        state.mark_phase_done("render")
+
+        state.mark_phase_done("finalize")
 
     # ===== Dry run =====
     if args.dry_run:
@@ -348,7 +304,8 @@ id: {source_data['id']}
         state.reset_all()
 
     # ===== Run phases =====
-    phase_order = ["split", "extract", "extract_events", "dedup", "link", "wikilink", "render"]
+    phase_order = ["split", "extract", "extract_events", "dedup", "link", "wikilink",
+                   "normalize", "write", "stubs", "finalize"]
 
     if args.phase:
         if args.phase not in phase_order:
@@ -393,8 +350,14 @@ id: {source_data['id']}
             )
         elif phase == "wikilink":
             phase_wikilink()
-        elif phase == "render":
-            phase_render()
+        elif phase == "normalize":
+            phase_normalize()
+        elif phase == "write":
+            phase_write()
+        elif phase == "stubs":
+            phase_stubs()
+        elif phase == "finalize":
+            phase_finalize()
 
         state.mark_phase_done(phase)
 

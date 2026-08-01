@@ -22,10 +22,17 @@ class TemplateRenderer:
         return defaults.get(name, f"{name}_template.md")
 
     def render_person(self, data: dict) -> str:
+        if self.era:
+            data = dict(data)
+            data.setdefault("_era_label", self.era.label)
+            data.setdefault("_source_heading", self.era.source_heading)
         template = self.env.get_template(self._get_template("person"))
         return template.render(**data)
 
     def render_event(self, data: dict) -> str:
+        if self.era:
+            data = dict(data)
+            data.setdefault("_era_label", self.era.label)
         template = self.env.get_template(self._get_template("event"))
         return template.render(**data)
 
