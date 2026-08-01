@@ -1,3 +1,15 @@
+## v2.3.2 (2026-08-02)
+
+### Fixed
+- **系统性垃圾节点过滤**: 三防线拦截无名人物(春燕的姑妈等)/别名碎片(宝玉（另一个）)/CBDB幻觉(愛新覺羅綿岫)
+  - prompt层: literary人物抽取禁止提取无名称谓
+  - dedup层: 别名映射表17条 + 无名pattern正则23条
+  - normalizer层: alias解析避免别名stub + should_skip_stub拒绝无名目标 + 孤儿文件清理
+- CBDB补全仅限ancient时代，literary不触发
+
+### Changed
+- 红楼梦: merged 302→272人(-10%), 孤儿文件31→3个
+
 ## v2.3.1 (2026-08-01)
 
 ### Added
