@@ -253,9 +253,13 @@ def main():
             print(f"  {category}: {count} 个")
 
         # 5c: 书籍源节点
+        era = book_config.get("era", "ancient")
+        source_type = "文学" if era == "literary" else "史书"
+        source_folder = global_config.get("source_folder", "史书")
+
         source_data = {
             "id": str(abs(hash(book_name)) % 10**16),
-            "类型": "史书",
+            "类型": source_type,
             "书名": book_name,
             "作者": "",
             "成书年代": "",
@@ -264,7 +268,7 @@ def main():
             "创建时间": datetime.now(timezone.utc).isoformat(),
         }
         source_rendered = f"""---
-类型: 史书
+类型: {source_type}
 id: {source_data['id']}
 书名: {source_data['书名']}
 作者: {source_data['作者']}
@@ -284,12 +288,12 @@ id: {source_data['id']}
         for person in resolved:
             source_rendered += f"- [[{person['姓名']}]]\n"
 
-        source_dir = writer._build_output_dir(book_config, global_config.get("source_folder", "史书"))
+        source_dir = writer._build_output_dir(book_config, source_folder)
         source_dir.mkdir(parents=True, exist_ok=True)
         source_file = source_dir / f"{book_name}.md"
         if not source_file.exists():
             source_file.write_text(source_rendered, encoding="utf-8")
-            print(f"  + 史书: {book_name}.md")
+            print(f"  + {source_type}: {book_name}.md")
 
         # 5d: MOC 生成
         moc_gen = MocGenerator(writer, book_config, global_config["output_base"])
