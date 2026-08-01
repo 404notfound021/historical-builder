@@ -180,6 +180,13 @@ class Normalizer:
                 p['官职'] = [o for o in p['官职'] if o.get('名称','') not in BAD_POSITIONS]
             if '爵位' in p:
                 p['爵位'] = [j for j in p['爵位'] if j.get('爵名','') not in BAD_POSITIONS]
+        # 6. Generic place cleanup
+        PLACE_GENERIC = {'吴地':'扬州','蜀地':'益州','魏地':'中原','秦地':'关中'}
+        for e in events:
+            loc = e.get('地点','')
+            if loc in PLACE_GENERIC:
+                e['地点'] = PLACE_GENERIC[loc]
+
         print(f'  5. Title fix + position filter done')
         print(f'  4. Done: {len(persons)} persons, {len(events)} events, {len(pnames)} names')
         return persons, events
