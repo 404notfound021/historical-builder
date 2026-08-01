@@ -1,3 +1,10 @@
+## v2.3.0 (2026-08-01)
+
+### Added
+- **多书支持**: --obsidian-root CLI + era:literary schema
+- 红楼梦book_config + literary人物prompt
+- 历史/文学数据完全隔离
+
 ## v2.2.9 (2026-08-01)
 
 ### Fixed

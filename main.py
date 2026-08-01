@@ -41,13 +41,14 @@ def main():
     parser.add_argument("--force", action="store_true", help="忽略 checkpoint，全量重跑")
     parser.add_argument("--phase", help="只跑指定阶段: split/extract/dedup/wikilink/render")
     parser.add_argument("--dry-run", action="store_true", help="不调 LLM，只验证配置和路径")
+    parser.add_argument("--obsidian-root", help="覆盖 Obsidian vault 路径")
     args = parser.parse_args()
 
     global_config = load_global_config()
     book_config = load_book_config(args.book)
 
     book_name = book_config["book_name"]
-    obsidian_root = Path(global_config["obsidian_root"]).expanduser()
+    obsidian_root = Path(args.obsidian_root or global_config["obsidian_root"]).expanduser()
     intermediate_dir = PROJECT_ROOT / "output" / book_name / "intermediate"
     state_path = PROJECT_ROOT / "output" / book_name / "state.json"
 

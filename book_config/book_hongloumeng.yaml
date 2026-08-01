@@ -1,0 +1,34 @@
+# 《红楼梦》专属配置
+book_name: 红楼梦
+source_path: resource/source/红楼梦/红楼梦.txt
+output_subdir: Literature/Hongloumeng
+dynasty_name: 清
+era: literary
+
+# 分章：按回目切分
+chapter_split:
+  mode: "regex"
+  pattern: "^第[一二三四五六七八九十百千]+回"
+
+# 输出子目录
+person_folder: 人物
+event_folder: 事件
+place_folder: 地名
+position_folder: 身份
+
+# 标签
+namespace_tag: "#红楼梦"
+
+# 专属prompt
+prompt_override:
+  person: "extract_person_literary.md"
+  event: "extract_event_literary.md"
+
+# 贾府势力
+factions:
+  - 贾府
+  - 荣国府
+  - 宁国府
+  - 王家
+  - 史家
+  - 薛家
