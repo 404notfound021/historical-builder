@@ -105,3 +105,11 @@ class TestRelationStubs:
         names = {x["姓名"] for x in r}
         assert "曹琬" in names, "缺失关系目标应自动创建stub"
         assert "曹操" in names
+
+class TestParentheticalClean:
+    def test_strip_role_suffix(self, nz):
+        p = [make_p(rels=[dict(人物="卞氏(曹丕母)", 关系类型="子")])]
+        r, _ = nz.run(p, [])
+        targets = {x["人物"] for x in r[0]["关系"]}
+        assert "卞氏" in targets
+        assert "卞氏(曹丕母)" not in targets

@@ -90,6 +90,16 @@ class Normalizer:
             p['朝代']=[d for d in p.get('朝代',[]) if d not in INVAL]
             p['关系']=[r for r in p.get('关系',[]) if r.get('人物','') not in INVAL]
 
+        # Clean: strip (role) suffixes from relation targets (卞氏(曹丕母) → 卞氏)
+        import re as _re
+        for p in persons:
+            for r in p.get('关系', []):
+                tgt = r.get('人物', '')
+                if '(' in tgt and ')' in tgt:
+                    clean_name = _re.sub(r'\([^)]+\)', '', tgt).strip()
+                    if clean_name and clean_name != tgt:
+                        r['人物'] = clean_name
+
         # Step: Create stubs for ALL missing relation targets
         for p in persons:
             for r in p.get('关系', []):
