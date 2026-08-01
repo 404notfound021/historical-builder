@@ -165,10 +165,10 @@ def main():
             PROJECT_ROOT / "output" / book_name / "provenance.json", book_name
         )
 
-        # 0.5: CBDB 补全
+        # 0.5: CBDB 补全 (仅 ancient 时代，文学人物不走CBDB)
         cbdb_path = Path(os.path.expanduser("~/workspace/dev/experiments/cbdb_sqlite/cbdb_20260725.sqlite3"))
         enriched_count = 0
-        if cbdb_path.exists():
+        if cbdb_path.exists() and book_config.get('era','ancient')=='ancient':
             from pipeline.cbdb_enricher import CBDBEnricher
             enricher = CBDBEnricher(cbdb_path)
             for person in resolved:
@@ -201,6 +201,18 @@ def main():
         (intermediate_dir / "resolved_persons.json").write_text(
             json.dumps(resolved, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+        # 5.0b: 清理输出目录中的孤儿文件（上次run残留、已修复的垃圾节点）
+        valid_names = {re.sub(r'[<>:"/\\|?*]', '-', p['姓名']) for p in resolved}
+        person_dir = writer._build_output_dir(book_config, "人物")
+        if person_dir.exists():
+            orphan_cleaned = 0
+            for f in list(person_dir.glob("*.md")):
+                if f.stem not in valid_names:
+                    f.unlink()
+                    orphan_cleaned += 1
+            if orphan_cleaned:
+                print(f"    孤儿文件清理: {orphan_cleaned} 个")
 
         # 5a: 增量写入人物 + 溯源
         person_stats = {"新建": 0, "合并": 0, "跳过": 0}

@@ -138,7 +138,7 @@ class Normalizer:
             for pn in e.get('参与人物',[]):
                 pn=_s(str(pn))
                 if pn in pnames: vp.append(pn)
-                elif pn and pn not in INVAL:
+                elif pn and pn not in INVAL and not self._should_skip_stub(pn):
                     pnames.add(pn);persons.append(self._stub(pn));vp.append(pn)
             e['参与人物']=vp
         # Person<-Event reverse
@@ -238,8 +238,11 @@ class Normalizer:
             for r in p.get('关系',[]):
                 tgt=r.get('人物','')
                 tgt=re.sub(r'\([^)]+\)','',tgt).strip()
+                # Resolve alias to main name
+                if self.era=='literary' and tgt in self.ALIAS_MAP:
+                    tgt=self.ALIAS_MAP[tgt]
                 r['人物']=tgt
-                if tgt and tgt not in INVAL and tgt not in pnames:
+                if tgt and tgt not in INVAL and tgt not in pnames and not self._should_skip_stub(tgt):
                     pnames.add(tgt);persons.append(self._stub(tgt))
 
         # Event stub targets
@@ -257,6 +260,30 @@ class Normalizer:
         if isinstance(data,list): return [self._strip_all(i) for i in data]
         if isinstance(data,str): return _s(data)
         return data
+
+    ALIAS_MAP = {
+        '宝玉':'贾宝玉','黛玉':'林黛玉','宝钗':'薛宝钗','凤姐':'王熙凤',
+        '凤姐儿':'王熙凤','湘云':'史湘云','宝琴':'薛宝琴','岫烟':'邢岫烟',
+        '探春':'贾探春','迎春':'贾迎春','惜春':'贾惜春','元春':'贾元春',
+        '巧姐':'贾巧姐','巧姐儿':'贾巧姐','金桂':'夏金桂',
+        '贾妃':'贾元春','元妃':'贾元春','代儒':'贾代儒',
+        '可卿':'秦可卿','五儿':'柳五儿','刘姥姥':'刘老老',
+        '贾蓉媳妇':'秦可卿','贾蓉的媳妇':'秦可卿',
+        '秦氏':'秦可卿','贾珠之妻李氏':'李纨','李宫裁':'李纨',
+        '大姐儿':'贾巧姐',
+    }
+
+    STUB_REJECT = re.compile(
+        r'(?:的(?:娘|妈|母亲|父亲|哥哥|弟弟|姐姐|妹妹|儿子|女儿|孙子|孙女|'
+        r'表兄|表弟|表哥|表姐|表妹|干娘|干儿子|嫂子|婆婆|大娘|奶奶|爷|'
+        r'姑姑|姑妈|姨妈|舅舅|叔叔|婶婶|女人|男人|师傅|姑娘)$'
+        r'|媳妇$|家的$|的女人$|的哥哥$|的弟弟$|的儿子$|的母亲$|的父亲$'
+        r'|^两个|们$|众人$|几个|其他成员$'
+        r'|[（(].+[）)])'
+    )
+
+    def _should_skip_stub(self, name):
+        return bool(self.STUB_REJECT.search(name))
 
     def _stub(self, name):
         return {'id':str(uuid.uuid4()),'姓名':name,'字':'无考','号':'无考','朝代':[],'生年':None,'卒年':None,'出生地':'','出生地今名':'','卒地':'','卒地今名':'','历任势力':[],'官职':[],'爵位':[],'关系':[],'参与事件':[],'生平概述':'','标签':['历史人物','自动生成stub']}

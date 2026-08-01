@@ -50,6 +50,10 @@ class Deduper:
         # 过滤名字碎片：单字/两字名且是另一人物的子串
         merged = self._filter_name_fragments(merged)
 
+        # 别名归一化 + 无名称谓过滤
+        merged = self._normalize_aliases(merged)
+        merged = self._filter_unnamed(merged)
+
         print(f"去重: {len(all_persons)} → {len(merged)} 人")
         return merged
 
@@ -69,6 +73,71 @@ class Deduper:
             result.append(p)
         if len(result) < len(persons):
             print(f"  名字碎片过滤: {len(persons)} → {len(result)}")
+        return result
+
+    # ── 文学别名映射（era=literary 时启用） ──
+    LITERARY_ALIASES = {
+        '宝玉':'贾宝玉','黛玉':'林黛玉','宝钗':'薛宝钗','凤姐':'王熙凤',
+        '凤姐儿':'王熙凤','湘云':'史湘云','宝琴':'薛宝琴','岫烟':'邢岫烟',
+        '探春':'贾探春','迎春':'贾迎春','惜春':'贾惜春','元春':'贾元春',
+        '巧姐':'贾巧姐','巧姐儿':'贾巧姐','金桂':'夏金桂',
+        '贾妃':'贾元春','元妃':'贾元春','代儒':'贾代儒',
+        '可卿':'秦可卿','五儿':'柳五儿','刘姥姥':'刘老老',
+        '贾蓉媳妇':'秦可卿','贾蓉的媳妇':'秦可卿',
+        '秦氏':'秦可卿','贾珠之妻李氏':'李纨','李宫裁':'李纨',
+        '大姐儿':'贾巧姐','龄官':'龄官','藕官':'藕官',
+        '芳官':'芳官','蕊官':'蕊官','葵官':'葵官','艾官':'艾官',
+        '豆官':'豆官','茄官':'茄官','药官':'药官','文官':'文官',
+    }
+
+    # ── 无名称谓 pattern（任何 era 启用） ──
+    UNNAMED_PATTERNS = [
+        r'的(?:娘|妈|母亲|父亲|哥哥|弟弟|姐姐|妹妹|儿子|女儿|孙子|孙女|'
+        r'表兄|表弟|表哥|表姐|表妹|干娘|干儿子|嫂子|婆婆|大娘|奶奶|爷|'
+        r'姑姑|姑妈|姨妈|舅舅|叔叔|婶婶|女人|男人|师傅|姑娘)$',
+        r'媳妇$', r'家的$', r'的女人$', r'的哥哥$', r'的弟弟$', r'的儿子$', r'的母亲$', r'的父亲$',
+        r'^两个', r'们$', r'众人$', r'几个', r'其他成员$',
+        r'[（(].+[）)]',  # 含括号的别名如 '宝玉（另一个）'
+    ]
+
+    def _normalize_aliases(self, persons: list[dict]) -> list[dict]:
+        """era=literary 时，将别名归一化到主名"""
+        era = self.book_config.get('era', 'ancient')
+        if era != 'literary':
+            return persons
+
+        for p in persons:
+            name = p.get('姓名','')
+            if name in self.LITERARY_ALIASES:
+                p['姓名'] = self.LITERARY_ALIASES[name]
+
+        # 合并归一化后的同名人物
+        groups = {}
+        for p in persons:
+            key = self.canonical_key(p)
+            groups.setdefault(key, []).append(p)
+        merged = []
+        for group in groups.values():
+            merged.append(self._merge_group(group))
+        if len(merged) < len(persons):
+            print(f"  别名合并: {len(persons)} → {len(merged)}")
+        return merged
+
+    def _filter_unnamed(self, persons: list[dict]) -> list[dict]:
+        """过滤以称呼/关系代替姓名的无名人物"""
+        import re
+        result = []
+        for p in persons:
+            name = p.get('姓名','')
+            is_unnamed = False
+            for pat in self.UNNAMED_PATTERNS:
+                if re.search(pat, name):
+                    is_unnamed = True
+                    break
+            if not is_unnamed:
+                result.append(p)
+        if len(result) < len(persons):
+            print(f"  无名人物过滤: {len(persons)} → {len(result)}")
         return result
 
     def _merge_group(self, group: list[dict]) -> dict:
