@@ -1,0 +1,26 @@
+# 敏感文件
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 输出目录
+output/
+
+# 原始史料（体积大，不提交 Git）
+resource/source/
+
+# IDE
+.vscode/
+.idea/
+
+# ChromaDB
+chroma_db/
+
+# macOS
+.DS_Store

@@ -1,0 +1,30 @@
+# 《三国志》专属配置
+book_name: 三国志
+source_path: resource/source/三国志/三国志.txt
+output_subdir: ThreeKingdoms/Structured
+dynasty_name: 三国
+
+# 分章策略
+chapter_split:
+  mode: "regex"
+  pattern: "^.{1,20}(?:纪|传)$"
+
+# 输出子目录
+person_folder: 人物
+event_folder: 事件
+faction_folder: 势力
+
+# 命名空间
+namespace_tag: "#三国史料"
+
+# 势力分类
+factions:
+  - 曹魏
+  - 蜀汉
+  - 东吴
+  - 东汉
+  - 西晋
+
+# 去重策略
+dedup:
+  strategy: "name+dynasty"
