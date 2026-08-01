@@ -1,6 +1,6 @@
 # 《红楼梦》专属配置
 book_name: 红楼梦
-source_path: resource/source/红楼梦/红楼梦.txt
+source_path: resource/source/文学/中国古代文学/红楼梦.txt
 output_subdir: Literature/Hongloumeng
 dynasty_name: 清
 era: literary

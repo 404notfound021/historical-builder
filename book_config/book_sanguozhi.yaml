@@ -1,6 +1,6 @@
 # 《三国志》专属配置
 book_name: 三国志
-source_path: resource/source/三国志/三国志.txt
+source_path: resource/source/历史/中国古代史/三国/三国志.txt
 output_subdir: ThreeKingdoms/Structured
 dynasty_name: 三国
 
