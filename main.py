@@ -131,6 +131,18 @@ def main():
         )
         return persons
 
+    # ===== Phase 3.7: Event Dedup =====
+    def phase_event_dedup():
+        events_path = intermediate_dir / "linked_events.json"
+        if not events_path.exists():
+            return
+        from pipeline.event_deduper import EventDeduper
+        events = json.loads(events_path.read_text(encoding="utf-8"))
+        deduper = EventDeduper()
+        events = deduper.deduplicate(events)
+        events_path.write_text(json.dumps(events, ensure_ascii=False, indent=2), encoding="utf-8")
+        state.mark_phase_done("event_dedup")
+
     # ===== Phase 4: Wikilink =====
     def phase_wikilink():
         merged = json.loads((intermediate_dir / "merged_persons.json").read_text(encoding="utf-8"))
@@ -304,8 +316,8 @@ id: {str(abs(hash(book_name)) % 10**16)}
         state.reset_all()
 
     # ===== Run phases =====
-    phase_order = ["split", "extract", "extract_events", "dedup", "link", "wikilink",
-                   "normalize", "write", "stubs", "finalize"]
+    phase_order = ["split", "extract", "extract_events", "dedup", "link", "event_dedup",
+                   "wikilink", "normalize", "write", "stubs", "finalize"]
 
     if args.phase:
         if args.phase not in phase_order:
@@ -348,6 +360,8 @@ id: {str(abs(hash(book_name)) % 10**16)}
             (intermediate_dir / "merged_persons.json").write_text(
                 json.dumps(persons, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+        elif phase == "event_dedup":
+            phase_event_dedup()
         elif phase == "wikilink":
             phase_wikilink()
         elif phase == "normalize":
