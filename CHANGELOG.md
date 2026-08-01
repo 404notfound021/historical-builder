@@ -1,3 +1,17 @@
+## v2.2.4 (2026-08-01)
+
+### Added
+- **全局断链扫描UT**: test_links.py — 扫描所有md文件中[[link]]，验证节点存在
+- 朝代stub节点自动生成
+- 事件stub在Normalizer中补全缺失引用
+
+### Fixed
+- 地点名称清理(武担之南→成都, 去括号垃圾)
+- Stub generator渲染全部linked_events(133→280事件)
+
+### Changed
+- 67 UT total
+
 ## v2.2.3 (2026-08-01)
 
 ### Fixed

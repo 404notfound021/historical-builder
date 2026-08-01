@@ -145,12 +145,14 @@ class StubGenerator:
         # 事件名归一化：诛董卓/诛杀董卓/吕布诛董卓 → 诛董卓
         event_persons = _normalize_event_names(event_persons)
 
-        # Only render events that have linked_events data (if available)
+        # Render ALL events from linked_events + person events
+        all_event_names = set(event_persons.keys())
         if event_data_index:
-            event_persons = {k: v for k, v in event_persons.items() if k in event_data_index}
+            all_event_names.update(event_data_index.keys())
         count = 0
-        for ev_name, person_names in event_persons.items():
+        for ev_name in all_event_names:
             # 优先用 event pipeline 的完整数据
+            person_names = event_persons.get(ev_name, [])
             rich = event_data_index.get(ev_name, {})
             data = {
                 "id": rich.get("id", str(abs(hash(ev_name)) % 10**16)),

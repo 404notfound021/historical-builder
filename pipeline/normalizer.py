@@ -133,6 +133,22 @@ class Normalizer:
                     if key not in seen: seen.add(key);clean.append(item)
                 p[f]=clean
 
+        # 4.5: Create event stubs for missing event references
+        for p in persons:
+            for ev in p.get('参与事件', []):
+                ev_str = str(ev)
+                if ev_str and ev_str not in INVAL and ev_str not in enames:
+                    enames.add(ev_str)
+                    events.append({
+                        'id': str(uuid.uuid4()),
+                        '事件名称': ev_str,
+                        '时间': '', '朝代': self.dyn, '地点': '',
+                        '参与人物': [], '涉及势力': [],
+                        '起因': '', '经过': '', '结果': '', '历史意义': '',
+                        '出处卷目': '',
+                    })
+        print(f'  3.7. Event stubs: added for missing events')
+
         # 5. Post: fix title-as-name (高贵乡公髦→曹髦) + filter non-positions
         TITLE_FIX = {
             '高贵乡公髦': ('曹髦', [{'类型':'谥号','名称':'高贵乡公'}]),
