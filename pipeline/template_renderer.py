@@ -8,7 +8,7 @@ class TemplateRenderer:
     def __init__(self, template_dir: Path):
         self.env = Environment(
             loader=FileSystemLoader(str(template_dir)),
-            trim_blocks=False,
+            trim_blocks=True,
             lstrip_blocks=True,
         )
 
