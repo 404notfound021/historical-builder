@@ -64,7 +64,7 @@ ANCIENT_TITLE_FIX={
 }
 ANCIENT_DYNASTIES={'东汉','西汉','曹魏','蜀汉','东吴','西晋','东晋','倭国'}
 ANCIENT_PLACE_GENERIC={'吴地':'扬州','蜀地':'益州','魏地':'中原','秦地':'关中'}
-ANCIENT_GARBAGE=['-东汉','-曹魏','-蜀汉','-东吴','魏晋','曹魏-','皇帝','群臣','百官','公卿']
+ANCIENT_GARBAGE=['-东汉','-曹魏','-蜀汉','-东吴','魏晋','曹魏-','皇帝','群臣','百官','公卿','位宫']
 
 ANCIENT_BAD_POS={'夫人','皇帝','皇后','太子','太后','王子','公主','世子','无考'}
 LITERARY_BAD_POS={'无考'}  # literary: only filter placeholder values
@@ -212,6 +212,18 @@ class Normalizer:
             if '官职' in p: p['官职']=[o for o in p['官职'] if o.get('名称','') not in self.bad_pos]
             if '爵位' in p: p['爵位']=[j for j in p['爵位'] if j.get('爵名','') not in self.bad_pos]
 
+        # Merge persons with same name after TITLE_FIX rename
+        nidx={}
+        for i,p in enumerate(persons):
+            nm=p['姓名']
+            if nm in nidx:
+                persons[nidx[nm]]=self._merge_person(persons[nidx[nm]],p)
+                persons[i]=None
+            else:
+                nidx[nm]=i
+        persons=[p for p in persons if p is not None]
+        pnames={p['姓名'] for p in persons}
+
         # Dynasty stubs (ancient only)
         if self.era=='ancient':
             for d in self.dynasty_stubs:
@@ -248,3 +260,27 @@ class Normalizer:
 
     def _stub(self, name):
         return {'id':str(uuid.uuid4()),'姓名':name,'字':'无考','号':'无考','朝代':[],'生年':None,'卒年':None,'出生地':'','出生地今名':'','卒地':'','卒地今名':'','历任势力':[],'官职':[],'爵位':[],'关系':[],'参与事件':[],'生平概述':'','标签':['历史人物','自动生成stub']}
+
+    def _merge_person(self, base, other):
+        """合并两个同名人物，other 的数据补入 base（base 优先）"""
+        for f in ['字','号','出生地','出生地今名','卒地','卒地今名','生平概述']:
+            if not base.get(f) or base[f]=='无考':
+                v=other.get(f)
+                if v and v!='无考': base[f]=v
+        for f in ['生年','卒年']:
+            if not base.get(f) and other.get(f):
+                base[f]=other[f]
+        for lst in ['官职','爵位','历任势力','关系','参与事件','朝代','标签']:
+            base.setdefault(lst,[])
+            for item in other.get(lst,[]):
+                if item not in base[lst]:
+                    base[lst].append(item)
+        if other.get('其他名号'):
+            base.setdefault('其他名号',[])
+            for a in other['其他名号']:
+                if a not in base['其他名号']: base['其他名号'].append(a)
+        if other.get('各卷记载'):
+            base.setdefault('各卷记载','')
+            if base['各卷记载']: base['各卷记载']+='\n'+other['各卷记载']
+            else: base['各卷记载']=other['各卷记载']
+        return base

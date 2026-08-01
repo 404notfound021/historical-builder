@@ -197,6 +197,10 @@ def main():
             (intermediate_dir / "linked_events.json").write_text(
                 json.dumps(linked_events, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+        # Save normalized data back to disk (includes TITLE_FIX renames + garbage removal)
+        (intermediate_dir / "resolved_persons.json").write_text(
+            json.dumps(resolved, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
         # 5a: 增量写入人物 + 溯源
         person_stats = {"新建": 0, "合并": 0, "跳过": 0}
