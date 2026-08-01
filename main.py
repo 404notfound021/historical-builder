@@ -144,10 +144,11 @@ def main():
         return resolved
 
     # ===== Phase 5: Render & Write =====
-    def _clean_icloud_dupes(writer):
+    def _clean_icloud_dupes(writer, book_config):
         import glob as _g
         for sub in ["人物","事件","地名","职官","MOC"]:
-            p = str(writer.obsidian_root / writer.output_base / sub / "* 2.md")
+            d = writer._build_output_dir(book_config, sub)
+            p = str(d / "* 2.md")
             for f in _g.glob(p):
                 try: os.remove(f)
                 except: pass
@@ -162,7 +163,7 @@ def main():
         writer = FileWriter(str(obsidian_root), global_config["output_base"], renderer)
 
         # Clean iCloud dupes before writing (writer now available)
-        _clean_icloud_dupes(writer)
+        _clean_icloud_dupes(writer, book_config)
 
         from pipeline.incremental_writer import IncrementalWriter
         from pipeline.provenance_tracker import ProvenanceTracker
@@ -305,10 +306,11 @@ id: {source_data['id']}
         print(f"  MOC: {moc_count} 个")
 
 
-        # 清理 iCloud 冲突文件（.* 2.md）
+        # 清理 iCloud 冲突文件
         import glob
         for subdir in ["人物", "事件", "地名", "职官", "MOC"]:
-            pattern = str(writer.obsidian_root / writer.output_base / subdir / "* 2.md")
+            d = writer._build_output_dir(book_config, subdir)
+            pattern = str(d / "* 2.md")
             for f in glob.glob(pattern):
                 try: os.remove(f)
                 except Exception: pass
