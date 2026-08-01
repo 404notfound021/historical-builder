@@ -102,6 +102,14 @@ def main():
         raw = json.loads((intermediate_dir / "raw_persons.json").read_text(encoding="utf-8"))
         deduper = Deduper(book_config)
         merged = deduper.deduplicate(raw)
+
+        # Literature relation fixup: reclassify 同僚→主仆/妾室/恋人 for literary works
+        if book_config.get("era") == "literary":
+            sys.path.insert(0, str(PROJECT_ROOT))
+            from scripts.fix_literary_relations import fix_relations
+            merged, fix_stats = fix_relations(merged)
+            print(f"  Relation fixup: {fix_stats.get('total_fixed', 0)} corrected")
+
         (intermediate_dir / "merged_persons.json").write_text(
             json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
         )
