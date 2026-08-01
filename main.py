@@ -254,8 +254,8 @@ def main():
 
         # 5c: 书籍源节点
         era = book_config.get("era", "ancient")
-        source_type = "文学" if era == "literary" else "史书"
-        source_folder = global_config.get("source_folder", "史书")
+        source_type = "文学" if era == "literary" else "文献"
+        source_folder = global_config.get("source_folder", "文献")
 
         source_data = {
             "id": str(abs(hash(book_name)) % 10**16),

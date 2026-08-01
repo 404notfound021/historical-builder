@@ -181,4 +181,4 @@ schema_modern:
   - name: 生平概述
     required: false
     type: string
-source_folder: 史书
+source_folder: 文献
