@@ -252,6 +252,14 @@ class StubGenerator:
         """文学地名: 使用 era.extract_places() 返回的 (place_events, place_persons) 写入文件"""
         import re as _re
         place_events, place_persons = place_data
+        all_places = set(place_events.keys())
+
+        # Build parent-child: "大观园凹晶馆" → parent="大观园"
+        def _find_parent(loc):
+            for other in all_places:
+                if other != loc and loc.startswith(other) and len(loc) > len(other):
+                    return other
+            return None
 
         count = 0
         output_dir = self.writer._build_output_dir(self.book_config, '地名')
@@ -267,19 +275,25 @@ class StubGenerator:
             persons_list = list(place_persons.get(loc, set()))
             evt_links = '\n'.join(f'- [[{e}]]' for e in sorted(set(events)))
             person_links = '\n'.join(f'- [[{p}]]' for p in sorted(persons_list)[:30])
+            parent = _find_parent(loc)
+            parent_line = f'\n上级: "[[{parent}]]"' if parent else ''
 
             content = f'''---
 类型: 地名
 id: {str(abs(hash(loc)) % 10**16)}
 名称: {loc}
-类别: ["文学虚构地点"]
+类别: ["文学虚构地点"]{parent_line}
 出处史书: "[[{self.book_config.get('book_name','')}]]"
 创建时间: {now}
 修改时间: {now}
 ---
 
 # {loc}
+'''
+            if parent:
+                content += f'\n> 属于 [[{parent}]]\n'
 
+            content += f'''
 ## 相关事件
 
 {evt_links}
