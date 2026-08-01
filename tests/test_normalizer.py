@@ -94,3 +94,14 @@ class TestPositions:
         r, _ = nz.run(p, [])
         names = [o["名称"] for o in r[0]["官职"]]
         assert "无考" not in names
+
+class TestRelationStubs:
+    def test_missing_target_gets_stub(self, nz):
+        p = [make_p(rels=[dict(人物="曹琬", 关系类型="子"), dict(人物="曹操", 关系类型="父子")]),
+             dict(id="2", 姓名="曹操", 字="", 号="", 朝代=["东汉"], 生年=155, 卒年=220,
+                  出生地="", 出生地今名="", 卒地="", 卒地今名="",
+                  历任势力=[], 官职=[], 爵位=[], 关系=[], 参与事件=[], 生平概述="", 标签=[])]
+        r, _ = nz.run(p, [])
+        names = {x["姓名"] for x in r}
+        assert "曹琬" in names, "缺失关系目标应自动创建stub"
+        assert "曹操" in names

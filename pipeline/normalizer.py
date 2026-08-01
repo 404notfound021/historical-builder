@@ -90,6 +90,15 @@ class Normalizer:
             p['朝代']=[d for d in p.get('朝代',[]) if d not in INVAL]
             p['关系']=[r for r in p.get('关系',[]) if r.get('人物','') not in INVAL]
 
+        # Step: Create stubs for ALL missing relation targets
+        for p in persons:
+            for r in p.get('关系', []):
+                tgt = r.get('人物', '')
+                if tgt and tgt not in INVAL and tgt not in pnames:
+                    pnames.add(tgt)
+                    persons.append(self._stub(tgt))
+        print(f'  3.5. Relation stubs: added for missing targets')
+
         # Final dedup + position name dedup + filter wukao
         for p in persons:
             for f in ['官职','爵位','历任势力']:
