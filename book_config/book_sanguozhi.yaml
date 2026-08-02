@@ -2,7 +2,6 @@
 book_name: 三国志
 obsidian_root: ~/Library/Mobile Documents/com~apple~CloudDocs/Obsidian/枢机智库
 source_path: resource/source/历史/中国古代史/三国/三国志.txt
-output_subdir: ThreeKingdoms/Structured
 dynasty_name: 三国
 
 # 分章策略
